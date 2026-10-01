@@ -12,6 +12,10 @@ import { useFitOnePage } from "./useFitOnePage";
 //   Tanda tangan dihitung dari tab stop docx (76,2 / 88,9 / 96 mm)
 //   Isi banyak -> dikecilkan otomatis agar tetap 1 lembar
 //   (mekanisme sama seperti KendaliPrint via useFitOnePage).
+//   *** DIKUNCI (Okt 2026, user approved): kop 12,5mm tanpa margin negatif,
+//   *** meta Tanggal + TTD "Bojonegoro" ikut tgl pengajuan (full date),
+//   *** a/b/c BEKU via snapshot, Program/Kegiatan/Sub proper-case.
+//   *** Jangan diubah tanpa konfirmasi user.
 // ============================================================
 
 const TNR = "'Times New Roman', Times, serif";

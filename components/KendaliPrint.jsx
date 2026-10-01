@@ -10,6 +10,9 @@ import { useFitOnePage } from "./useFitOnePage";
 //   Isi    : Arial 11 pt (mengecil otomatis bila isi panjang agar tetap 1 halaman),
 //            judul Arial 13 pt bold, spasi tunggal
 //   Tabel  : NO | URAIAN | PAGU | DISERAP | SISA | RENCANA | SISA AKHIR
+//   *** DIKUNCI (Okt 2026, user approved): fit 1 lembar, a/b/c + tabel BEKU
+//   *** via snapshot, Program/Kegiatan/Sub proper-case.
+//   *** Jangan diubah tanpa konfirmasi user.
 // ============================================================
 
 const ARIAL = "Arial, Helvetica, sans-serif";
