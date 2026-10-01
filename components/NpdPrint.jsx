@@ -1,0 +1,713 @@
+"use client";
+
+// ============================================================
+// Cetak NPD — replika dokumen "NOTA PENGAJUAN DANA (NPD)"
+// Sumber acuan: NOTA PENGAJUAN DANA 2.docx
+//   Kertas : ukuran sumber DOCX (8,5 x 14 inci), margin 25,4 mm
+//   Judul  : Times New Roman 18 pt bold underline; "(NPD)" TNR 16 pt bold (center)
+//   Isi    : Arial 12 pt, blok metadata Arial 11 pt, spasi tunggal
+//   Tabel  : lebar 143,6 mm (527 + 4024 + 3591 twips), garis 1 px hitam
+//   Tanda tangan dihitung dari tab stop docx (76,2 / 88,9 / 96 mm)
+// ============================================================
+
+const TNR = "'Times New Roman', Times, serif";
+const ARIAL = "Arial, Helvetica, sans-serif";
+const BD = "1px solid #000";
+
+// Blok isi (Arial 12 pt) dan blok metadata (Arial 11 pt) — spasi tunggal.
+const TEXT = { fontFamily: ARIAL, fontSize: "12pt", lineHeight: 1, margin: 0 };
+const TEXT11 = {
+  fontFamily: ARIAL,
+  fontSize: "11pt",
+  lineHeight: "12pt",
+  margin: 0,
+};
+
+const BULAN = [
+  "Januari",
+  "Februari",
+  "Maret",
+  "April",
+  "Mei",
+  "Juni",
+  "Juli",
+  "Agustus",
+  "September",
+  "Oktober",
+  "November",
+  "Desember",
+];
+
+function formatBulanTahun(dateStr) {
+  if (!dateStr) return "—";
+  const d = new Date(`${dateStr}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return "—";
+  return `${BULAN[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+function terbilangAngka(n) {
+  const satuan = [
+    "", "Satu", "Dua", "Tiga", "Empat", "Lima", "Enam", "Tujuh", "Delapan", "Sembilan",
+  ];
+  const belasan = [
+    "Sepuluh", "Sebelas", "Dua Belas", "Tiga Belas", "Empat Belas", "Lima Belas",
+    "Enam Belas", "Tujuh Belas", "Delapan Belas", "Sembilan Belas",
+  ];
+  const puluhan = [
+    "", "", "Dua Puluh", "Tiga Puluh", "Empat Puluh", "Lima Puluh", "Enam Puluh",
+    "Tujuh Puluh", "Delapan Puluh", "Sembilan Puluh",
+  ];
+
+  function conv(num) {
+    if (num < 10) return satuan[num];
+    if (num < 20) return belasan[num - 10];
+    if (num < 100) {
+      const s = Math.floor(num / 10);
+      const r = num % 10;
+      return puluhan[s] + (r ? ` ${satuan[r]}` : "");
+    }
+    if (num < 1000) {
+      const s = Math.floor(num / 100);
+      const r = num % 100;
+      return `${s === 1 ? "Se" : `${satuan[s]} `}Ratus${r ? ` ${conv(r)}` : ""}`;
+    }
+    if (num < 1000000) {
+      const s = Math.floor(num / 1000);
+      const r = num % 1000;
+      return `${s === 1 ? "Se" : `${conv(s)} `}Ribu${r ? ` ${conv(r)}` : ""}`;
+    }
+    if (num < 1000000000) {
+      const s = Math.floor(num / 1000000);
+      const r = num % 1000000;
+      return `${s === 1 ? "Se" : `${conv(s)} `}Juta${r ? ` ${conv(r)}` : ""}`;
+    }
+    if (num < 1000000000000) {
+      const s = Math.floor(num / 1000000000);
+      const r = num % 1000000000;
+      return `${s === 1 ? "Se" : `${conv(s)} `}Miliar${r ? ` ${conv(r)}` : ""}`;
+    }
+    const s = Math.floor(num / 1000000000000);
+    const r = num % 1000000000000;
+    return `${s === 1 ? "Se" : `${conv(s)} `}Triliun${r ? ` ${conv(r)}` : ""}`;
+  }
+
+  return conv(Math.round(Number(n) || 0));
+}
+
+function terbilang(n) {
+  const val = Math.round(Number(n) || 0);
+  if (!val) return "Nol Rupiah";
+  return `${terbilangAngka(val)} Rupiah`;
+}
+
+function rupiah(v) {
+  return `Rp. ${new Intl.NumberFormat("id-ID").format(Number(v ?? 0))}`;
+}
+
+// Angka saja (tanpa "Rp.") — dipakai pada sel jumlah agar sejajar kanan.
+function angka(v) {
+  return new Intl.NumberFormat("id-ID").format(Number(v ?? 0));
+}
+
+// Posisi tanda tangan — hasil hitung tab stop docx (72 twips default + tab khusus 3749).
+const SIGNER_JABATAN_MM = "76.2mm";
+const SIGNER_NAMA_MM = "88.9mm";
+const SIGNER_NIP_MM = "96mm";
+
+export default function NpdPrint({
+  pengajuan,
+  items = [],
+  bidang,
+  pengaju,
+  ptk,
+  budgetSummary = [],
+}) {
+  if (!pengajuan) return null;
+
+  const first = items[0]?.budget_lines || {};
+  const namaProgram = first.nama_program || "—";
+  const namaKegiatan = first.nama_kegiatan || "—";
+  const subKegiatan = first.nama_sub_kegiatan || "—";
+
+  const totalPagu = budgetSummary.reduce((a, b) => a + Number(b.pagu || 0), 0);
+  const totalRealisasi = budgetSummary.reduce(
+    (a, b) => a + Number(b.realisasi || 0),
+    0
+  );
+  const totalSisa = totalPagu - totalRealisasi;
+  const rencana = Number(pengajuan.total_nominal || 0);
+
+  // Penanda tangan: PTK dari master data (menu Data PTK) -> fallback akun pengaju.
+  const namaPenanda = ptk?.nama || pengaju?.display_name || "—";
+  const nipPenanda = ptk?.nip || pengaju?.nip || "";
+  const jabatanPenanda = ptk?.jabatan || "Pejabat Pelaksana Teknis Kegiatan";
+
+  const metaRows = [
+    ["Kepada", ": Yth. Pengguna Anggaran Dinas Kepemudaan Dan Olahraga"],
+    [
+      "Dari",
+      ": Pejabat Pelaksana Teknis Kegiatan Program Penunjang Urusan Pemerintahan",
+    ],
+    ["", "\u00A0\u00A0Kab/Kota"],
+    ["Tanggal", `: ${formatBulanTahun(pengajuan.tanggal_pengajuan)}`],
+    ["Sifat", ": Segera"],
+    ["Lampiran", ": -"],
+    ["Perihal", `: ${pengajuan.nama_npd || "—"}`],
+  ];
+
+  const ringkasan = [
+    { no: "a.", label: "Pagu Anggaran", value: totalPagu },
+    { no: "b.", label: "Anggaran yang sudah diserap", value: totalRealisasi },
+    { no: "c.", label: "Sisa yang bisa diserap", value: totalSisa },
+  ];
+
+  return (
+    <div className="npd-print-container">
+      <style>{`
+        .npd-sheet {
+          width: 215.9mm;
+          min-height: 355.6mm;
+          padding: 25.4mm;
+          box-sizing: border-box;
+          background: #fff;
+          color: #000;
+        }
+        @page { size: 215.9mm 355.6mm; margin: 0; }
+        @media print {
+          html, body { background: #fff !important; margin: 0 !important; padding: 0 !important; }
+          body * { visibility: hidden !important; }
+          .npd-print-container, .npd-print-container * { visibility: visible !important; }
+          .npd-print-container {
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 215.9mm !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            z-index: 99999;
+            background: #fff !important;
+          }
+          .npd-sheet {
+            width: 215.9mm !important;
+            min-height: 0 !important;
+            margin: 0 !important;
+            padding: 25.4mm !important;
+            box-shadow: none !important;
+            border: 0 !important;
+          }
+        }
+      `}</style>
+
+      <div className="npd-sheet">
+        {/* ── KOP SURAT (header docx: 4 baris TNR + logo + garis ganda 19,19 cm) ── */}
+        <div
+          style={{
+            position: "relative",
+            marginTop: "-1.29cm",
+            marginBottom: "10pt",
+          }}
+        >
+          {/* Logo asli dari header dokumen sumber: 1,27 x 1,95 cm. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/kop-logo-bojonegoro.png"
+            alt="Logo Kabupaten Bojonegoro"
+            style={{
+              position: "absolute",
+              left: 0,
+              top: "3pt",
+              width: "1.27cm",
+              height: "1.95cm",
+              filter: "grayscale(100%)",
+            }}
+          />
+          <p
+            style={{
+              margin: 0,
+              textAlign: "center",
+              fontFamily: TNR,
+              fontSize: "16pt",
+              fontWeight: "bold",
+              lineHeight: 1,
+            }}
+          >
+            PEMERINTAH KABUPATEN BOJONEGORO
+          </p>
+          <p
+            style={{
+              margin: "1pt 0 0 0",
+              textAlign: "center",
+              fontFamily: TNR,
+              fontSize: "16pt",
+              fontWeight: "bold",
+              lineHeight: 1,
+            }}
+          >
+            DINAS KEPEMUDAAN DAN OLAHRAGA
+          </p>
+          <p
+            style={{
+              margin: "1pt 0 0 0",
+              textAlign: "center",
+              fontFamily: TNR,
+              fontSize: "14pt",
+              lineHeight: 1,
+            }}
+          >
+            Jalan Pattimura No. 36 telp/fax (0353) 881257
+          </p>
+          <p
+            style={{
+              margin: "1pt 0 0 0",
+              textAlign: "center",
+              fontFamily: TNR,
+              fontSize: "16pt",
+              fontWeight: "bold",
+              lineHeight: 1,
+            }}
+          >
+            B O J O N E G O R O
+          </p>
+          {/* Garis ganda kop: lebar 19,19 cm mulai 1,16 cm di kiri margin teks. */}
+          <div
+            style={{
+              marginLeft: "-1.16cm",
+              width: "19.19cm",
+              marginTop: "3pt",
+            }}
+          >
+            <div style={{ height: "1.2pt", background: "#000" }} />
+            <div
+              style={{ height: "0.8pt", background: "#000", marginTop: "2pt" }}
+            />
+          </div>
+        </div>
+
+        {/* ── JUDUL (TNR 18 pt bold underline + "(NPD)" TNR 16 pt bold) ── */}
+        <p
+          style={{
+            margin: 0,
+            textAlign: "center",
+            fontFamily: TNR,
+            fontSize: "18pt",
+            fontWeight: "bold",
+            textDecoration: "underline",
+            lineHeight: 1,
+          }}
+        >
+          NOTA PENGAJUAN DANA
+        </p>
+        <p
+          style={{
+            margin: 0,
+            fontFamily: TNR,
+            fontSize: "16pt",
+            fontWeight: "bold",
+            textAlign: "center",
+            lineHeight: 1,
+          }}
+        >
+          (NPD)
+        </p>
+        <p style={{ ...TEXT11, height: "11pt" }} />
+
+        {/* ── METADATA (Arial 11 pt; nilai mulai 25,4 mm seperti tab docx) ── */}
+        <table
+          style={{
+            width: "100%",
+            borderCollapse: "collapse",
+            tableLayout: "fixed",
+          }}
+        >
+          <tbody>
+            {metaRows.map(([label, value], i) => (
+              <tr key={i}>
+                <td
+                  style={{
+                    ...TEXT11,
+                    width: "25.4mm",
+                    verticalAlign: "top",
+                    padding: 0,
+                  }}
+                >
+                  {label}
+                </td>
+                <td style={{ ...TEXT11, verticalAlign: "top", padding: 0 }}>
+                  {value}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        {/* ── KALIMAT PEMBUKA (indent 12,7 mm + baris pertama 12,7 mm) ── */}
+        <div
+          aria-hidden="true"
+          style={{
+            marginLeft: "2.17cm",
+            width: "14.05cm",
+            height: "1px",
+            background: "#000",
+            marginTop: "3pt",
+          }}
+        />
+
+        <p
+          style={{
+            ...TEXT,
+            marginTop: "11pt",
+            paddingLeft: "12.7mm",
+            textIndent: "12.7mm",
+          }}
+        >
+          Bersama ini kami mengajukan dengan hormat permohonan pencairan
+        </p>
+
+        {/* ── PROGRAM / KEGIATAN / SUB KEGIATAN ── */}
+        <table
+          style={{
+            width: "100%",
+            borderCollapse: "collapse",
+            tableLayout: "fixed",
+          }}
+        >
+          <tbody>
+            {[
+              ["Program", `: ${namaProgram}`],
+              ["Kegiatan", `: ${namaKegiatan}`],
+              ["Sub kegiatan", `: ${subKegiatan}`],
+            ].map(([label, value]) => (
+              <tr key={label}>
+                <td
+                  style={{
+                    ...TEXT,
+                    width: "25.4mm",
+                    verticalAlign: "top",
+                    padding: 0,
+                  }}
+                >
+                  {label}
+                </td>
+                <td
+                  style={{
+                    ...TEXT,
+                    verticalAlign: "top",
+                    padding: "0 0 0 3mm",
+                    textIndent: "-3mm",
+                  }}
+                >
+                  {value}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        {/* ── RINCIAN ANGGARAN ── */}
+        <p style={{ ...TEXT, marginTop: "11pt" }}>
+          Sebagaimana tercantum dalam APBD Kabupaten Bojonegoro Tahun Anggaran{" "}
+          {pengajuan.tahun || new Date().getFullYear()} dengan rincian sebagai
+          berikut :
+        </p>
+
+        {/* Rincian a/b/c: nomor di 0, label di 12,7 mm, jumlah rata kanan 143,6 mm */}
+        <table
+          style={{
+            width: "143.6mm",
+            borderCollapse: "collapse",
+            tableLayout: "fixed",
+            marginTop: "2pt",
+          }}
+        >
+          <colgroup>
+            <col style={{ width: "12.7mm" }} />
+            <col />
+            <col style={{ width: "58mm" }} />
+          </colgroup>
+          <tbody>
+            {ringkasan.map((r) => (
+              <tr key={r.no}>
+                <td
+                  style={{
+                    ...TEXT,
+                    padding: "0 0 0 6.35mm",
+                    verticalAlign: "top",
+                  }}
+                >
+                  {r.no}
+                </td>
+                <td style={{ ...TEXT, padding: 0, verticalAlign: "top" }}>
+                  {r.label}
+                </td>
+                <td
+                  style={{
+                    ...TEXT,
+                    padding: 0,
+                    verticalAlign: "top",
+                    fontWeight: r.no === "b." ? "normal" : "bold",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "25mm 1fr",
+                      whiteSpace: "nowrap",
+                      borderBottom: r.no === "b." ? BD : undefined,
+                    }}
+                  >
+                    <span>= Rp.</span>
+                    <span style={{ textAlign: "right" }}>{angka(r.value)}</span>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        {/* Garis pemisah sebelum rencana penyerapan (docx: 14,05 cm mulai 2,17 cm) */}
+        <table
+          style={{
+            width: "143.6mm",
+            borderCollapse: "collapse",
+            tableLayout: "fixed",
+            marginTop: "12pt",
+          }}
+        >
+          <colgroup>
+            <col style={{ width: "12.7mm" }} />
+            <col />
+            <col style={{ width: "58mm" }} />
+          </colgroup>
+          <tbody>
+            <tr>
+              <td style={{ ...TEXT, padding: 0, verticalAlign: "top" }} />
+              <td
+                style={{
+                  ...TEXT,
+                  padding: 0,
+                  verticalAlign: "top",
+                }}
+              >
+                Rencana penyerapan sebesar
+              </td>
+              <td
+                style={{
+                  ...TEXT,
+                  padding: 0,
+                  verticalAlign: "top",
+                  fontWeight: "bold",
+                }}
+              >
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "25mm 1fr",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  <span>= Rp.</span>
+                  <span style={{ textAlign: "right" }}>{angka(rencana)}</span>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td
+                colSpan={3}
+                style={{
+                  ...TEXT,
+                  padding: 0,
+                  paddingLeft: "12.7mm",
+                  verticalAlign: "top",
+                  fontWeight: "bold",
+                }}
+              >
+                ({terbilang(rencana)})
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        <p style={{ ...TEXT, marginTop: "11pt" }}>
+          Rencana Penyerapan tersebut dibebankan pada rekening sebgai berikut :
+        </p>
+
+        {/* ── TABEL REKENING (lebar 143,6 mm = 527 + 4024 + 3591 twips) ── */}
+        <table
+          style={{
+            width: "143.6mm",
+            borderCollapse: "collapse",
+            tableLayout: "fixed",
+            marginTop: "2pt",
+          }}
+        >
+          <colgroup>
+            <col style={{ width: "9.3mm" }} />
+            <col style={{ width: "71mm" }} />
+            <col style={{ width: "63.3mm" }} />
+          </colgroup>
+          <thead>
+            <tr>
+              <th
+                style={{
+                  ...TEXT,
+                  border: BD,
+                  padding: "1.9mm",
+                  height: "7.5mm",
+                  textAlign: "center",
+                  fontWeight: "normal",
+                  verticalAlign: "middle",
+                }}
+              >
+                No
+              </th>
+              <th
+                style={{
+                  ...TEXT,
+                  border: BD,
+                  padding: "1.9mm",
+                  textAlign: "center",
+                  fontWeight: "normal",
+                  verticalAlign: "middle",
+                }}
+              >
+                Kode Rekening/Uraian
+              </th>
+              <th
+                style={{
+                  ...TEXT,
+                  border: BD,
+                  padding: "1.9mm",
+                  textAlign: "center",
+                  fontWeight: "normal",
+                  verticalAlign: "middle",
+                }}
+              >
+                Jumlah Dana
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((it, idx) => (
+              <tr key={it.id || idx}>
+                <td
+                  style={{
+                    ...TEXT,
+                    border: BD,
+                    padding: "1.9mm",
+                    height: "14.1mm",
+                    textAlign: "center",
+                    verticalAlign: "middle",
+                  }}
+                >
+                  {idx + 1}
+                </td>
+                <td
+                  style={{
+                    ...TEXT,
+                    border: BD,
+                    padding: "1.9mm",
+                    fontWeight: "bold",
+                    verticalAlign: "middle",
+                  }}
+                >
+                  <p style={{ margin: 0 }}>
+                    {it.budget_lines?.kode_uraian || "—"}
+                  </p>
+                  <p style={{ margin: 0 }}>
+                    {it.budget_lines?.nama_uraian || "—"}
+                  </p>
+                </td>
+                <td
+                  style={{
+                    ...TEXT,
+                    border: BD,
+                    padding: "1.9mm",
+                    textAlign: "right",
+                    fontWeight: "bold",
+                    verticalAlign: "middle",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {rupiah(it.nominal)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr>
+              <td
+                style={{
+                  ...TEXT,
+                  border: BD,
+                  padding: "1.9mm",
+                  height: "6.3mm",
+                  verticalAlign: "middle",
+                }}
+              />
+              <td
+                style={{
+                  ...TEXT,
+                  border: BD,
+                  padding: "1.9mm",
+                  textAlign: "center",
+                  fontWeight: "bold",
+                  verticalAlign: "middle",
+                }}
+              >
+                Jumlah
+              </td>
+              <td
+                style={{
+                  ...TEXT,
+                  border: BD,
+                  padding: "1.9mm",
+                  textAlign: "right",
+                  fontWeight: "bold",
+                  verticalAlign: "middle",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {rupiah(rencana)}
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+
+        {/* ── PENUTUP ── */}
+        <p style={{ ...TEXT, margin: "8pt 0 0 0" }}>
+          Adapun Dokumen SPJ dan Persyaratan lain telah lengkap sesuai dengan
+          peraturan perundang undangan yang berlaku.
+        </p>
+        <p style={{ ...TEXT, margin: "8pt 0 0 0" }}>
+          Demikian untuk menjadikan periksa dan mohon berkenan Bapak Kepala
+          Dinas untuk memberikan persetujuan.
+        </p>
+
+        {/* ── TANDA TANGAN (rata tengah, Geser ke kanan) ── */}
+        <div style={{ width: "50%", marginLeft: "auto", textAlign: "center" }}>
+          <p style={{ ...TEXT, marginTop: "11pt" }}>&nbsp;</p>
+          <p style={{ ...TEXT, marginTop: "11pt" }}>
+            {jabatanPenanda}
+          </p>
+          <p style={{ ...TEXT, height: "12pt" }} />
+          <p style={{ ...TEXT, height: "12pt" }} />
+          <p style={{ ...TEXT, height: "12pt" }} />
+          <p style={{ ...TEXT, height: "12pt" }} />
+          <p style={{ ...TEXT, height: "12pt" }} />
+          <p
+            style={{
+              ...TEXT,
+              fontWeight: "bold",
+              textDecoration: "underline",
+            }}
+          >
+            {namaPenanda}
+          </p>
+          <p style={{ ...TEXT }}>
+            {nipPenanda ? `NIP. ${nipPenanda}` : "NIP. …"}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}

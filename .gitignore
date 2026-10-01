@@ -1,0 +1,36 @@
+# dependencies
+/node_modules
+/.next
+/out
+
+# production
+/build
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# local env files
+.env*.local
+
+# vercel
+.vercel
+
+# tooling / agent skills (local only)
+.agents/
+.opencode/
+.kilo/
+
+# temp dumps
+_x*/
+_x_*.txt
+_x_*.ps1
+*.zip
+
+# python cache
+__pycache__/
