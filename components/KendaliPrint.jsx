@@ -48,6 +48,14 @@ function formatTanggal(dateStr) {
   return `${d.getDate()} ${BULAN[d.getMonth()]} ${d.getFullYear()}`;
 }
 
+// Ubah HURUF BESAR SEMUA dari database jadi huruf proper
+// (kapital tiap kata), konsisten dengan cetak NPD.
+function properCase(s) {
+  return String(s || "")
+    .toLowerCase()
+    .replace(/(^|[\s/\-.()])([a-z])/g, (m, p, c) => p + c.toUpperCase());
+}
+
 // Angka saja (tanpa "Rp.") — dipakai pada sel jumlah agar sejajar kanan.
 function angka(v) {
   return new Intl.NumberFormat("id-ID").format(Number(v ?? 0));
@@ -79,9 +87,9 @@ export default function KendaliPrint({
   const tanggalTtd = formatTanggal(pengajuan.tanggal_pengajuan);
 
   const first = items[0]?.budget_lines || {};
-  const namaProgram = first.nama_program || "—";
-  const namaKegiatan = first.nama_kegiatan || "—";
-  const subKegiatan = first.nama_sub_kegiatan || "—";
+  const namaProgram = properCase(first.nama_program || "—");
+  const namaKegiatan = properCase(first.nama_kegiatan || "—");
+  const subKegiatan = properCase(first.nama_sub_kegiatan || "—");
 
   // Rencana penyerapan per uraian — nominal NPD ini (snapshot dokumen).
   // Selalu tampil penuh di cetak walaupun di sistem sudah pindah ke realisasi.
