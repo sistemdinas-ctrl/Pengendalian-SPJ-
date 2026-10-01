@@ -1,5 +1,7 @@
 "use client";
 
+import { useFitOnePage } from "./useFitOnePage";
+
 // ============================================================
 // Cetak NPD — replika dokumen "NOTA PENGAJUAN DANA (NPD)"
 // Sumber acuan: NOTA PENGAJUAN DANA 2.docx
@@ -8,6 +10,8 @@
 //   Isi    : Arial 12 pt, blok metadata Arial 11 pt, spasi tunggal
 //   Tabel  : lebar 143,6 mm (527 + 4024 + 3591 twips), garis 1 px hitam
 //   Tanda tangan dihitung dari tab stop docx (76,2 / 88,9 / 96 mm)
+//   Isi banyak -> dikecilkan otomatis agar tetap 1 lembar
+//   (mekanisme sama seperti KendaliPrint via useFitOnePage).
 // ============================================================
 
 const TNR = "'Times New Roman', Times, serif";
@@ -40,9 +44,18 @@ const BULAN = [
 
 function formatBulanTahun(dateStr) {
   if (!dateStr) return "—";
-  const d = new Date(`${dateStr}T00:00:00`);
+  const d = new Date(`${String(dateStr).slice(0, 10)}T00:00:00`);
   if (Number.isNaN(d.getTime())) return "—";
   return `${BULAN[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+// Tanggal lengkap untuk tanda tangan, mis. "23 September 2026".
+// Selalu ikut tanggal input pengajuan pada form NPD.
+function formatTanggal(dateStr) {
+  if (!dateStr) return "—";
+  const d = new Date(`${String(dateStr).slice(0, 10)}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return "—";
+  return `${d.getDate()} ${BULAN[d.getMonth()]} ${d.getFullYear()}`;
 }
 
 function terbilangAngka(n) {
@@ -122,7 +135,19 @@ export default function NpdPrint({
   ptk,
   budgetSummary = [],
 }) {
+  // Fit 1 lembar ala Excel (sama seperti KendaliPrint): kertas legal
+  // 14 inci, padding vertikal sheet = 25,4mm + 25,4mm = 5,08cm.
+  // Hook dipasang sebelum early-return agar urutannya stabil.
+  const { innerRef, fitWrapStyle, fitInnerStyle } = useFitOnePage(
+    pengajuan?.id || "",
+    5.08,
+    14
+  );
+
   if (!pengajuan) return null;
+
+  // Tanggal tanda tangan = tanggal input pengajuan pada form NPD.
+  const tanggalTtd = formatTanggal(pengajuan.tanggal_pengajuan);
 
   const first = items[0]?.budget_lines || {};
   const namaProgram = first.nama_program || "—";
@@ -164,6 +189,7 @@ export default function NpdPrint({
   return (
     <div className="npd-print-container">
       <style>{`
+        /* NPD: kertas 8,5 x 14 inci, margin 25,4mm (ikut ukuran sumber DOCX) */
         .npd-sheet {
           width: 215.9mm;
           min-height: 355.6mm;
@@ -172,19 +198,30 @@ export default function NpdPrint({
           background: #fff;
           color: #000;
         }
+        .npd-sheet, .npd-sheet * {
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
+        }
         @page { size: 215.9mm 355.6mm; margin: 0; }
         @media print {
           html, body { background: #fff !important; margin: 0 !important; padding: 0 !important; }
-          body * { visibility: hidden !important; }
-          .npd-print-container, .npd-print-container * { visibility: visible !important; }
+          body > *:not(.npd-print-root) { display: none !important; }
+          .npd-print-root {
+            position: static !important;
+            display: block !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow: visible !important;
+            background: #fff !important;
+          }
+          .npd-print-root .npd-backdrop,
+          .npd-print-root .npd-toolbar { display: none !important; }
           .npd-print-container {
-            position: fixed !important;
-            top: 0 !important;
-            left: 0 !important;
+            position: static !important;
+            display: block !important;
             width: 215.9mm !important;
             margin: 0 !important;
             padding: 0 !important;
-            z-index: 99999;
             background: #fff !important;
           }
           .npd-sheet {
@@ -199,6 +236,8 @@ export default function NpdPrint({
       `}</style>
 
       <div className="npd-sheet">
+        <div style={fitWrapStyle}>
+          <div ref={innerRef} style={fitInnerStyle}>
         {/* ── KOP SURAT (header docx: 4 baris TNR + logo + garis ganda 19,19 cm) ── */}
         <div
           style={{
@@ -685,7 +724,9 @@ export default function NpdPrint({
 
         {/* ── TANDA TANGAN (rata tengah, Geser ke kanan) ── */}
         <div style={{ width: "50%", marginLeft: "auto", textAlign: "center" }}>
-          <p style={{ ...TEXT, marginTop: "11pt" }}>&nbsp;</p>
+          <p style={{ ...TEXT, marginTop: "11pt" }}>
+            Bojonegoro, {tanggalTtd}
+          </p>
           <p style={{ ...TEXT, marginTop: "11pt" }}>
             {jabatanPenanda}
           </p>
@@ -706,6 +747,8 @@ export default function NpdPrint({
           <p style={{ ...TEXT }}>
             {nipPenanda ? `NIP. ${nipPenanda}` : "NIP. …"}
           </p>
+        </div>
+          </div>
         </div>
       </div>
     </div>

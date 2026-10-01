@@ -16,8 +16,9 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 // teks (lebar box dalam tidak diubah) — mirip perkecil fotokopi.
 // ============================================================
 
-// Tinggi kertas F4 13 inci dalam px CSS (1in = 96px).
-const PAGE_H_PX = 13 * 96;
+// Tinggi kertas dalam px CSS (1in = 96px). Default F4 13 inci (kendali);
+// NPD memakai legal 14 inci (8,5 x 14 inci).
+const DEFAULT_PAGE_H_PX = 13 * 96;
 // Margin aman: target sedikit di bawah jatah penuh agar beda wrap
 // layar-vs-print tidak menumpahkan baris terakhir ke halaman 2.
 const FIT_SAFETY = 0.97;
@@ -25,12 +26,14 @@ const FIT_SAFETY = 0.97;
 /**
  * @param {string} docKey kunci dokumen (ganti NPD -> ukur ulang dari 100%)
  * @param {number} padYcm total padding vertikal sheet dalam cm (atas + bawah)
+ * @param {number} pageHIn tinggi kertas dalam inci (default 13 = F4; NPD = 14)
  * @returns {{ innerRef: import("react").RefObject, fitWrapStyle: object|undefined, fitInnerStyle: object|undefined }}
  */
-export function useFitOnePage(docKey, padYcm) {
+export function useFitOnePage(docKey, padYcm, pageHIn = 13) {
   const innerRef = useRef(null);
   const [fit, setFit] = useState({ z: 1, h: 0 });
   const keyRef = useRef(docKey);
+  const pageHPx = (Number(pageHIn) || 13) * 96;
 
   // Ganti dokumen -> ukur ulang dari 100%. Dijaga ref agar tidak
   // menimpa hasil fit pada render awal (passive effect jalan belakangan).
@@ -49,7 +52,7 @@ export function useFitOnePage(docKey, padYcm) {
     const el = innerRef.current;
     if (!el) return;
     const h = el.getBoundingClientRect().height;
-    const avail = (PAGE_H_PX - (padYcm / 2.54) * 96) * FIT_SAFETY;
+    const avail = (pageHPx - (padYcm / 2.54) * 96) * FIT_SAFETY;
     if (h > avail && h > 0) {
       const z = avail / h;
       if (z < 0.999) setFit({ z, h: Math.ceil(avail) + 2 });

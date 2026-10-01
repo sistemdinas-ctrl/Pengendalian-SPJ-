@@ -35,7 +35,7 @@ const BULAN = [
 
 function formatBulanTahun(dateStr) {
   if (!dateStr) return "—";
-  const d = new Date(`${dateStr}T00:00:00`);
+  const d = new Date(`${String(dateStr).slice(0, 10)}T00:00:00`);
   if (Number.isNaN(d.getTime())) return "—";
   return `${BULAN[d.getMonth()]} ${d.getFullYear()}`;
 }
@@ -43,7 +43,7 @@ function formatBulanTahun(dateStr) {
 // Tanggal lengkap untuk tanda tangan, mis. "23 September 2026".
 function formatTanggal(dateStr) {
   if (!dateStr) return "—";
-  const d = new Date(`${dateStr}T00:00:00`);
+  const d = new Date(`${String(dateStr).slice(0, 10)}T00:00:00`);
   if (Number.isNaN(d.getTime())) return "—";
   return `${d.getDate()} ${BULAN[d.getMonth()]} ${d.getFullYear()}`;
 }
