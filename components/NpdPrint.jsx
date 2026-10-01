@@ -127,6 +127,7 @@ export default function NpdPrint({
   pengaju,
   ptk,
   budgetSummary = [],
+  disbursements = [],
 }) {
   // Fit 1 lembar ala Excel (sama seperti KendaliPrint): kertas legal
   // 14 inci, padding vertikal sheet = 12,5mm + 25,4mm = 3,79cm.
@@ -149,11 +150,35 @@ export default function NpdPrint({
   const namaKegiatan = first.nama_kegiatan || "—";
   const subKegiatan = first.nama_sub_kegiatan || "—";
 
-  const totalPagu = budgetSummary.reduce((a, b) => a + Number(b.pagu || 0), 0);
-  const totalRealisasi = budgetSummary.reduce(
-    (a, b) => a + Number(b.realisasi || 0),
+  // DOKUMEN BEKU (migration_014, sama seperti KendaliPrint): cetak ulang NPD
+  // harus SAMA PERSIS seperti saat pertama diajukan — pencairan NPD ini
+  // sendiri TIDAK boleh mengubah angka a/b/c di nota yang sama.
+  // NPD nomor berikutnya otomatis ikut realisasi karena dibaca live di sana.
+  // Prioritas: snapshot_items se-sub kegiatan; fallback: nilai terkini
+  // MINUS pencairan milik NPD ini (untuk NPD lama sebelum ada snapshot).
+  const snapshotRows = Array.isArray(pengajuan?.snapshot_items)
+    ? pengajuan.snapshot_items
+    : [];
+  const useSnapshot = snapshotRows.length > 0 && pengajuan?.snapshot_at != null;
+  const ownCair = (disbursements || []).reduce(
+    (a, d) => a + Number(d.nominal || 0),
     0
   );
+  let totalPagu;
+  let totalRealisasi;
+  if (useSnapshot) {
+    totalPagu = snapshotRows.reduce((a, s) => a + Number(s.pagu || 0), 0);
+    totalRealisasi = snapshotRows.reduce(
+      (a, s) => a + Number(s.realisasi || 0),
+      0
+    );
+  } else {
+    totalPagu = budgetSummary.reduce((a, b) => a + Number(b.pagu || 0), 0);
+    totalRealisasi = Math.max(
+      0,
+      budgetSummary.reduce((a, b) => a + Number(b.realisasi || 0), 0) - ownCair
+    );
+  }
   const totalSisa = totalPagu - totalRealisasi;
   const rencana = Number(pengajuan.total_nominal || 0);
 
