@@ -232,6 +232,33 @@ function BackgroundDecoration() {
 }
 
 /* ═══════════════════════════════════════
+   Pesan error login yang ramah (Indonesia).
+   Supabase sengaja mengembalikan "Invalid login credentials" untuk
+   email salah MAUPUN password salah (agar akun tidak bisa ditebak),
+   jadi kita tampilkan gabungan "Email atau password salah".
+   ═══════════════════════════════════════ */
+function toFriendlyLoginError(err) {
+  const raw = String(err?.message || err?.code || "");
+  const msg = raw.toLowerCase();
+
+  if (msg.includes("invalid login credentials") || msg.includes("invalid_grant"))
+    return "Email atau password salah. Periksa kembali lalu coba lagi.";
+  if (msg.includes("email not confirmed") || msg.includes("email not verified"))
+    return "Email belum diverifikasi. Cek inbox email lalu verifikasi dulu.";
+  if (msg.includes("too many requests") || msg.includes("rate limit") || msg.includes("over request"))
+    return "Terlalu banyak percobaan login. Tunggu sebentar lalu coba lagi.";
+  if (
+    msg.includes("failed to fetch") ||
+    msg.includes("network") ||
+    msg.includes("fetch failed")
+  )
+    return "Koneksi ke server bermasalah. Periksa internet lalu coba lagi.";
+  if (msg.includes("belum diisi") || msg.includes("supabase_url"))
+    return "Konfigurasi server belum lengkap. Hubungi admin.";
+  return "Email atau password salah. Periksa kembali lalu coba lagi.";
+}
+
+/* ═══════════════════════════════════════
    MAIN LOGIN PAGE
    ═══════════════════════════════════════ */
 export default function LoginPage() {
@@ -255,7 +282,7 @@ export default function LoginPage() {
       if (signErr) throw signErr;
       window.location.assign("/");
     } catch (err) {
-      setError(err.message || "Gagal login. Periksa email/password.");
+      setError(toFriendlyLoginError(err));
     } finally {
       setLoading(false);
     }
