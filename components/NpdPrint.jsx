@@ -42,14 +42,7 @@ const BULAN = [
   "Desember",
 ];
 
-function formatBulanTahun(dateStr) {
-  if (!dateStr) return "—";
-  const d = new Date(`${String(dateStr).slice(0, 10)}T00:00:00`);
-  if (Number.isNaN(d.getTime())) return "—";
-  return `${BULAN[d.getMonth()]} ${d.getFullYear()}`;
-}
-
-// Tanggal lengkap untuk tanda tangan, mis. "23 September 2026".
+// Tanggal lengkap untuk metadata & tanda tangan, mis. "23 September 2026".
 // Selalu ikut tanggal input pengajuan pada form NPD.
 function formatTanggal(dateStr) {
   if (!dateStr) return "—";
@@ -136,11 +129,13 @@ export default function NpdPrint({
   budgetSummary = [],
 }) {
   // Fit 1 lembar ala Excel (sama seperti KendaliPrint): kertas legal
-  // 14 inci, padding vertikal sheet = 25,4mm + 25,4mm = 5,08cm.
+  // 14 inci, padding vertikal sheet = 12,5mm + 25,4mm = 3,79cm.
+  // (Padding atas 12,5mm = posisi kop docx: 25,4mm margin - 1,29cm tarikan,
+  //  tanpa margin negatif agar tidak kepotong wrapper overflow-hidden.)
   // Hook dipasang sebelum early-return agar urutannya stabil.
   const { innerRef, fitWrapStyle, fitInnerStyle } = useFitOnePage(
     pengajuan?.id || "",
-    5.08,
+    3.79,
     14
   );
 
@@ -174,7 +169,7 @@ export default function NpdPrint({
       ": Pejabat Pelaksana Teknis Kegiatan Program Penunjang Urusan Pemerintahan",
     ],
     ["", "\u00A0\u00A0Kab/Kota"],
-    ["Tanggal", `: ${formatBulanTahun(pengajuan.tanggal_pengajuan)}`],
+    ["Tanggal", `: ${formatTanggal(pengajuan.tanggal_pengajuan)}`],
     ["Sifat", ": Segera"],
     ["Lampiran", ": -"],
     ["Perihal", `: ${pengajuan.nama_npd || "—"}`],
@@ -189,11 +184,12 @@ export default function NpdPrint({
   return (
     <div className="npd-print-container">
       <style>{`
-        /* NPD: kertas 8,5 x 14 inci, margin 25,4mm (ikut ukuran sumber DOCX) */
+        /* NPD: kertas 8,5 x 14 inci (ikut ukuran sumber DOCX).
+           Padding atas 12,5mm agar kop duduk di posisi docx tanpa margin negatif. */
         .npd-sheet {
           width: 215.9mm;
           min-height: 355.6mm;
-          padding: 25.4mm;
+          padding: 12.5mm 25.4mm 25.4mm;
           box-sizing: border-box;
           background: #fff;
           color: #000;
@@ -228,7 +224,7 @@ export default function NpdPrint({
             width: 215.9mm !important;
             min-height: 0 !important;
             margin: 0 !important;
-            padding: 25.4mm !important;
+            padding: 12.5mm 25.4mm 25.4mm !important;
             box-shadow: none !important;
             border: 0 !important;
           }
@@ -242,7 +238,7 @@ export default function NpdPrint({
         <div
           style={{
             position: "relative",
-            marginTop: "-1.29cm",
+            marginTop: 0,
             marginBottom: "10pt",
           }}
         >
