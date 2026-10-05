@@ -205,7 +205,7 @@ export default function NpdPrint({
       "Dari",
       ": Pejabat Pelaksana Teknis Kegiatan Program Penunjang Urusan Pemerintahan",
     ],
-    ["", "\u00A0\u00A0Kab/Kota"],
+    ["", "Kab/Kota"],
     ["Tanggal", `: ${formatTanggal(pengajuan.tanggal_pengajuan)}`],
     ["Sifat", ": Segera"],
     ["Lampiran", ": -"],
@@ -404,7 +404,17 @@ export default function NpdPrint({
                 >
                   {label}
                 </td>
-                <td style={{ ...TEXT11, verticalAlign: "top", padding: 0 }}>
+                <td
+                  style={{
+                    ...TEXT11,
+                    verticalAlign: "top",
+                    // Hanging indent: baris lanjutan sejajar di bawah teks
+                    // (bukan di bawah ":"), mis. Perihal yang wrap 2-3 baris.
+                    padding: "0 0 0 3mm",
+                    textIndent: i === 2 ? 0 : "-3mm",
+                    overflowWrap: "break-word",
+                  }}
+                >
                   {value}
                 </td>
               </tr>
@@ -464,8 +474,11 @@ export default function NpdPrint({
                   style={{
                     ...TEXT,
                     verticalAlign: "top",
-                    padding: "0 0 0 3mm",
-                    textIndent: "-3mm",
+                    // Hanging indent 4mm: baris ke-2 dan seterusnya mundur
+                    // sejajar di bawah teks (bukan di bawah ":").
+                    padding: "0 0 0 4mm",
+                    textIndent: "-4mm",
+                    overflowWrap: "break-word",
                   }}
                 >
                   {value}
