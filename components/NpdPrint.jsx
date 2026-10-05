@@ -392,7 +392,12 @@ export default function NpdPrint({
           }}
         >
           <tbody>
-            {metaRows.map(([label, value], i) => (
+            {metaRows.map(([label, value], i) => {
+              // Baris lanjutan "Kab/Kota" tidak punya ":" — titik dua tetap
+              // dirender tapi disembunyikan agar kolomnya sama lebar dan
+              // teksnya sejajar tepat di bawah awal kalimat di atasnya.
+              const hasColon = /^:/.test(String(value));
+              return (
               <tr key={i}>
                 <td
                   style={{
@@ -415,14 +420,19 @@ export default function NpdPrint({
                       overflowWrap: "break-word",
                     }}
                   >
-                    <span>{/^:/.test(value) ? ":" : ""}</span>
+                    <span
+                      style={{ visibility: hasColon ? "visible" : "hidden" }}
+                    >
+                      :
+                    </span>
                     <span style={{ minWidth: 0 }}>
                       {String(value).replace(/^:\s?/, "")}
                     </span>
                   </span>
                 </td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
 
