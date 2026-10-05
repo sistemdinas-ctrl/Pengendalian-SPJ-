@@ -404,18 +404,22 @@ export default function NpdPrint({
                 >
                   {label}
                 </td>
-                <td
-                  style={{
-                    ...TEXT11,
-                    verticalAlign: "top",
-                    // Hanging indent: baris lanjutan sejajar di bawah teks
-                    // (bukan di bawah ":"), mis. Perihal yang wrap 2-3 baris.
-                    padding: "0 0 0 3.5mm",
-                    textIndent: i === 2 ? 0 : "-3.5mm",
-                    overflowWrap: "break-word",
-                  }}
-                >
-                  {value}
+                <td style={{ ...TEXT11, verticalAlign: "top", padding: 0 }}>
+                  {/* ":" kolom sendiri agar baris ke-2 dan seterusnya
+                      selalu sejajar tepat di bawah awal kalimat. */}
+                  <span
+                    style={{
+                      display: "inline-grid",
+                      gridTemplateColumns: "auto 1fr",
+                      columnGap: "1mm",
+                      overflowWrap: "break-word",
+                    }}
+                  >
+                    <span>{/^:/.test(value) ? ":" : ""}</span>
+                    <span style={{ minWidth: 0 }}>
+                      {String(value).replace(/^:\s?/, "")}
+                    </span>
+                  </span>
                 </td>
               </tr>
             ))}
@@ -470,18 +474,22 @@ export default function NpdPrint({
                 >
                   {label}
                 </td>
-                <td
-                  style={{
-                    ...TEXT,
-                    verticalAlign: "top",
-                    // Hanging indent: baris ke-2 dan seterusnya mundur
-                    // sejajar di bawah teks (bukan di bawah ":").
-                    padding: "0 0 0 4.5mm",
-                    textIndent: "-4.5mm",
-                    overflowWrap: "break-word",
-                  }}
-                >
-                  {value}
+                <td style={{ ...TEXT, verticalAlign: "top", padding: 0 }}>
+                  {/* ":" kolom sendiri agar baris ke-2 dan seterusnya
+                      selalu sejajar tepat di bawah awal kalimat. */}
+                  <span
+                    style={{
+                      display: "inline-grid",
+                      gridTemplateColumns: "auto 1fr",
+                      columnGap: "1.2mm",
+                      overflowWrap: "break-word",
+                    }}
+                  >
+                    <span>:</span>
+                    <span style={{ minWidth: 0 }}>
+                      {String(value).replace(/^:\s?/, "")}
+                    </span>
+                  </span>
                 </td>
               </tr>
             ))}
