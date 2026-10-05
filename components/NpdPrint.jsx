@@ -410,8 +410,8 @@ export default function NpdPrint({
                     verticalAlign: "top",
                     // Hanging indent: baris lanjutan sejajar di bawah teks
                     // (bukan di bawah ":"), mis. Perihal yang wrap 2-3 baris.
-                    padding: "0 0 0 3mm",
-                    textIndent: i === 2 ? 0 : "-3mm",
+                    padding: "0 0 0 4mm",
+                    textIndent: i === 2 ? 0 : "-4mm",
                     overflowWrap: "break-word",
                   }}
                 >
@@ -474,10 +474,10 @@ export default function NpdPrint({
                   style={{
                     ...TEXT,
                     verticalAlign: "top",
-                    // Hanging indent 4mm: baris ke-2 dan seterusnya mundur
+                    // Hanging indent 5mm: baris ke-2 dan seterusnya mundur
                     // sejajar di bawah teks (bukan di bawah ":").
-                    padding: "0 0 0 4mm",
-                    textIndent: "-4mm",
+                    padding: "0 0 0 5mm",
+                    textIndent: "-5mm",
                     overflowWrap: "break-word",
                   }}
                 >
