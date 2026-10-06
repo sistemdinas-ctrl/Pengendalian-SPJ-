@@ -51,39 +51,8 @@ function formatTanggal(dateStr) {
   return `${d.getDate()} ${BULAN[d.getMonth()]} ${d.getFullYear()}`;
 }
 
-// Ubah HURUF BESAR SEMUA dari database jadi huruf proper,
-// konsisten dengan cetak NPD (kata sambung kecil, singkatan besar semua).
-const KATA_KECIL = new Set([
-  "dan", "atau", "serta", "maupun",
-  "di", "ke", "dari", "pada", "dalam", "untuk", "dengan", "oleh",
-  "sebagai", "tentang", "yang", "bagi", "demi", "hingga", "sampai",
-  "sejak", "tanpa", "karena", "sebab", "jika", "kalau", "agar",
-  "supaya", "per", "antar", "bahwa",
-]);
-const SINGKATAN = new Set([
-  "RAD", "APBD", "APBN", "NPD", "SPJ", "SKPD", "RKA", "DPA", "DPPA",
-  "ASN", "PNS", "CPNS", "PPPK", "OPD", "RPJMD", "RKPD", "SIPD",
-  "SPP", "SPM", "SP2D", "LPJ", "DAK", "DAU", "DBH", "PAD", "SILPA",
-  "KUA", "PPAS", "BPK", "BPKP", "APIP", "SAKIP", "RENSTRA", "RENJA",
-  "BOS", "BOP", "BTT", "DPRD",
-]);
-function properCase(s) {
-  let pertama = true;
-  return String(s || "")
-    .toLowerCase()
-    .split(/([^\p{L}\p{N}]+)/u)
-    .map((tok) => {
-      if (!/[\p{L}\p{N}]/u.test(tok)) return tok;
-      const besar = tok.toUpperCase();
-      let hasil;
-      if (SINGKATAN.has(besar)) hasil = besar;
-      else if (!pertama && KATA_KECIL.has(tok)) hasil = tok;
-      else hasil = tok.charAt(0).toUpperCase() + tok.slice(1);
-      pertama = false;
-      return hasil;
-    })
-    .join("");
-}
+// Catatan: tidak ada lagi ubah besar-kecil huruf — semua nama tampil
+// apa adanya mengikuti database (permintaan user, Okt 2026).
 
 // Angka saja (tanpa "Rp.") — dipakai pada sel jumlah agar sejajar kanan.
 function angka(v) {
@@ -116,9 +85,10 @@ export default function KendaliPrint({
   const tanggalTtd = formatTanggal(pengajuan.tanggal_pengajuan);
 
   const first = items[0]?.budget_lines || {};
-  const namaProgram = properCase(first.nama_program || "—");
-  const namaKegiatan = properCase(first.nama_kegiatan || "—");
-  const subKegiatan = properCase(first.nama_sub_kegiatan || "—");
+  // Tampil apa adanya mengikuti database input pagu (tanpa ubah besar-kecil).
+  const namaProgram = first.nama_program || "—";
+  const namaKegiatan = first.nama_kegiatan || "—";
+  const subKegiatan = first.nama_sub_kegiatan || "—";
 
   // Rencana penyerapan per uraian — nominal NPD ini (snapshot dokumen).
   // Selalu tampil penuh di cetak walaupun di sistem sudah pindah ke realisasi.

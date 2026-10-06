@@ -14,7 +14,7 @@ import { useFitOnePage } from "./useFitOnePage";
 //   (mekanisme sama seperti KendaliPrint via useFitOnePage).
 //   *** DIKUNCI (Okt 2026, user approved): kop 12,5mm tanpa margin negatif,
 //   *** meta Tanggal + TTD "Bojonegoro" ikut tgl pengajuan (full date),
-//   *** a/b/c BEKU via snapshot, Program/Kegiatan/Sub proper-case.
+//   *** a/b/c BEKU via snapshot, Program/Kegiatan/Sub/Uraian apa adanya ikut database.
 //   *** Jangan diubah tanpa konfirmasi user.
 // ============================================================
 
@@ -114,41 +114,8 @@ function rupiah(v) {
   return `Rp. ${new Intl.NumberFormat("id-ID").format(Number(v ?? 0))}`;
 }
 
-// Ubah HURUF BESAR SEMUA dari database jadi huruf proper,
-// mis. "PENUNJANG URUSAN..." -> "Penunjang Urusan...".
-// Kata sambung/depan (dan, di, dari, ...) tetap kecil kecuali kata pertama,
-// singkatan dinas (RAD, APBD, NPD, ...) tetap HURUF BESAR semua.
-const KATA_KECIL = new Set([
-  "dan", "atau", "serta", "maupun",
-  "di", "ke", "dari", "pada", "dalam", "untuk", "dengan", "oleh",
-  "sebagai", "tentang", "yang", "bagi", "demi", "hingga", "sampai",
-  "sejak", "tanpa", "karena", "sebab", "jika", "kalau", "agar",
-  "supaya", "per", "antar", "bahwa",
-]);
-const SINGKATAN = new Set([
-  "RAD", "APBD", "APBN", "NPD", "SPJ", "SKPD", "RKA", "DPA", "DPPA",
-  "ASN", "PNS", "CPNS", "PPPK", "OPD", "RPJMD", "RKPD", "SIPD",
-  "SPP", "SPM", "SP2D", "LPJ", "DAK", "DAU", "DBH", "PAD", "SILPA",
-  "KUA", "PPAS", "BPK", "BPKP", "APIP", "SAKIP", "RENSTRA", "RENJA",
-  "BOS", "BOP", "BTT", "DPRD",
-]);
-function properCase(s) {
-  let pertama = true;
-  return String(s || "")
-    .toLowerCase()
-    .split(/([^\p{L}\p{N}]+)/u)
-    .map((tok) => {
-      if (!/[\p{L}\p{N}]/u.test(tok)) return tok;
-      const besar = tok.toUpperCase();
-      let hasil;
-      if (SINGKATAN.has(besar)) hasil = besar;
-      else if (!pertama && KATA_KECIL.has(tok)) hasil = tok;
-      else hasil = tok.charAt(0).toUpperCase() + tok.slice(1);
-      pertama = false;
-      return hasil;
-    })
-    .join("");
-}
+// Catatan: tidak ada lagi ubah besar-kecil huruf — semua nama tampil
+// apa adanya mengikuti database (permintaan user, Okt 2026).
 
 // Angka saja (tanpa "Rp.") — dipakai pada sel jumlah agar sejajar kanan.
 function angka(v) {
@@ -186,9 +153,11 @@ export default function NpdPrint({
   const tanggalTtd = formatTanggal(pengajuan.tanggal_pengajuan);
 
   const first = items[0]?.budget_lines || {};
-  const namaProgram = properCase(first.nama_program || "—");
-  const namaKegiatan = properCase(first.nama_kegiatan || "—");
-  const subKegiatan = properCase(first.nama_sub_kegiatan || "—");
+  // Nama program/kegiatan/sub/uraian tampil APA ADANYA mengikuti database
+  // input pagu (tanpa ubah besar-kecil huruf).
+  const namaProgram = first.nama_program || "—";
+  const namaKegiatan = first.nama_kegiatan || "—";
+  const subKegiatan = first.nama_sub_kegiatan || "—";
 
   // DOKUMEN BEKU (migration_014, sama seperti KendaliPrint): cetak ulang NPD
   // harus SAMA PERSIS seperti saat pertama diajukan — pencairan NPD ini
