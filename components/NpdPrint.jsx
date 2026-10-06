@@ -425,7 +425,13 @@ export default function NpdPrint({
                     >
                       :
                     </span>
-                    <span style={{ minWidth: 0 }}>
+                    <span
+                      style={{
+                        minWidth: 0,
+                        // Justify khusus Perihal bila teksnya lebih dari 1 baris.
+                        textAlign: label === "Perihal" ? "justify" : "left",
+                      }}
+                    >
                       {String(value).replace(/^:\s?/, "")}
                     </span>
                   </span>
@@ -496,7 +502,14 @@ export default function NpdPrint({
                     }}
                   >
                     <span>:</span>
-                    <span style={{ minWidth: 0 }}>
+                    <span
+                      style={{
+                        minWidth: 0,
+                        // Justify khusus Kegiatan & Sub kegiatan bila
+                        // teksnya lebih dari 1 baris.
+                        textAlign: label === "Program" ? "left" : "justify",
+                      }}
+                    >
                       {String(value).replace(/^:\s?/, "")}
                     </span>
                   </span>
