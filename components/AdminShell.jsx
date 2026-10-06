@@ -9,6 +9,7 @@ import {
   WalletCards,
   FilePlus2,
   History,
+  FileSpreadsheet,
   LogOut,
   Menu,
   X,
@@ -24,6 +25,7 @@ const NAV_ITEMS = [
   { href: "/pagu", label: "Input Pagu", icon: WalletCards },
   { href: "/npd", label: "Pengajuan NPD", icon: FilePlus2 },
   { href: "/history", label: "History Pengajuan", icon: History },
+  { href: "/laporan", label: "Laporan SPJ", icon: FileSpreadsheet },
   // Master data PTK — hanya admin (dipakai saat cetak NPD).
   { href: "/ptk", label: "Data PPTK", icon: UserCog, adminOnly: true },
 ];
