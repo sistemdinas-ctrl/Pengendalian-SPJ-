@@ -478,7 +478,7 @@ export default function NpdPrint({
               ["Program", `: ${namaProgram}`],
               ["Kegiatan", `: ${namaKegiatan}`],
               ["Sub kegiatan", `: ${subKegiatan}`],
-            ].map(([label, value]) => (
+            ].map(([label, value], ri) => (
               <tr key={label}>
                 <td
                   style={{
@@ -486,11 +486,20 @@ export default function NpdPrint({
                     width: "25.4mm",
                     verticalAlign: "top",
                     padding: 0,
+                    // Jarak 0,5 enter (6pt) tiap judul, kecuali baris terakhir.
+                    paddingBottom: ri < 2 ? "6pt" : 0,
                   }}
                 >
                   {label}
                 </td>
-                <td style={{ ...TEXT, verticalAlign: "top", padding: 0 }}>
+                <td
+                  style={{
+                    ...TEXT,
+                    verticalAlign: "top",
+                    padding: 0,
+                    paddingBottom: ri < 2 ? "6pt" : 0,
+                  }}
+                >
                   {/* ":" kolom sendiri agar baris ke-2 dan seterusnya
                       selalu sejajar tepat di bawah awal kalimat. */}
                   <span
