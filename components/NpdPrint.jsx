@@ -535,13 +535,14 @@ export default function NpdPrint({
           berikut :
         </p>
 
-        {/* Rincian a/b/c: nomor di 0, label di 12,7 mm, jumlah rata kanan 143,6 mm */}
+        {/* Rincian a/b/c: nomor di 0, label di 12,7 mm, jumlah rata kanan 143,6 mm.
+            Jarak 0,5 enter (6pt) dari kalimat "sebagai berikut :" ke "a.". */}
         <table
           style={{
             width: "143.6mm",
             borderCollapse: "collapse",
             tableLayout: "fixed",
-            marginTop: "2pt",
+            marginTop: "6pt",
           }}
         >
           <colgroup>
@@ -550,34 +551,24 @@ export default function NpdPrint({
             <col style={{ width: "58mm" }} />
           </colgroup>
           <tbody>
-            {ringkasan.map((r, ri) => (
+            {ringkasan.map((r) => (
               <tr key={r.no}>
                 <td
                   style={{
                     ...TEXT,
                     padding: "0 0 0 6.35mm",
-                    // Jarak 0,5 enter (6pt) tiap rincian, kecuali baris terakhir.
-                    paddingBottom: ri < ringkasan.length - 1 ? "6pt" : 0,
                     verticalAlign: "top",
                   }}
                 >
                   {r.no}
                 </td>
-                <td
-                  style={{
-                    ...TEXT,
-                    padding: 0,
-                    paddingBottom: ri < ringkasan.length - 1 ? "6pt" : 0,
-                    verticalAlign: "top",
-                  }}
-                >
+                <td style={{ ...TEXT, padding: 0, verticalAlign: "top" }}>
                   {r.label}
                 </td>
                 <td
                   style={{
                     ...TEXT,
                     padding: 0,
-                    paddingBottom: ri < ringkasan.length - 1 ? "6pt" : 0,
                     verticalAlign: "top",
                     fontWeight: r.no === "b." ? "normal" : "bold",
                   }}
