@@ -14,12 +14,43 @@ import {
 import { createBrowserClient } from "@/lib/supabase/client";
 import { formatRupiah, persenRealisasi } from "@/lib/domain";
 
-function defaultBulan() {
+function todayISO() {
+  const d = new Date();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${m}-${day}`;
+}
+
+// "2026-09-30" -> "30 SEPTEMBER 2026" (dipakai sebagai baris 3 Excel).
+function bulanLabelFromISO(iso) {
   const names = ["JANUARI","FEBRUARI","MARET","APRIL","MEI","JUNI","JULI","AGUSTUS","SEPTEMBER","OKTOBER","NOVEMBER","DESEMBER"];
-  const now = new Date();
-  // Ikuti contoh file: tanggal akhir bulan berjalan + nama bulan + tahun.
-  const last = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-  return `${last} ${names[now.getMonth()]} ${now.getFullYear()}`;
+  const [y, m, d] = String(iso || "").split("-").map(Number);
+  if (!y || !m || !d) return "";
+  return `${d} ${names[m - 1]} ${y}`;
+}
+
+function defaultBulan() {
+  return bulanLabelFromISO(todayISO());
+}
+
+// Realisasi s.d. tanggal cut-off (inklusif, batas akhir hari WIB).
+// Mengambil disbursements lalu diagregasi per budget_line_id di client,
+// sehingga RLS tetap berlaku (admin semua, user hanya bidangnya).
+async function fetchCutoffMap(client, cutoffISO) {
+  const upper = `${cutoffISO}T23:59:59+07:00`;
+  const { data, error } = await client
+    .from("disbursements")
+    .select("nominal, pengajuan_item:pengajuan_item_id(budget_line_id)")
+    .lte("dicairkan_at", upper)
+    .limit(5000);
+  if (error) throw error;
+  const map = {};
+  for (const d of data || []) {
+    const bid = d.pengajuan_item?.budget_line_id;
+    if (!bid) continue;
+    map[bid] = (map[bid] || 0) + Number(d.nominal || 0);
+  }
+  return map;
 }
 
 export default function LaporanSpjPage() {
@@ -30,6 +61,9 @@ export default function LaporanSpjPage() {
   const [loadError, setLoadError] = useState("");
   const [filterBidang, setFilterBidang] = useState("semua");
   const [filterTahun, setFilterTahun] = useState(String(new Date().getFullYear()));
+  const [cutoff, setCutoff] = useState(todayISO());
+  const [cutoffMap, setCutoffMap] = useState(null);
+  const [cutoffLoading, setCutoffLoading] = useState(false);
   const [bulanLabel, setBulanLabel] = useState(defaultBulan());
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState({ type: "", text: "" });
@@ -55,14 +89,17 @@ export default function LaporanSpjPage() {
       if (bidErr) throw bidErr;
       setBidangList(bidData || []);
       // RLS otomatis: admin dapat semua, user hanya bidangnya.
+      // Pagu + identitas uraian dari view; realisasi dihitung dari cut-off (lihat bawah).
       const { data: realData, error: realErr } = await supabase
         .from("v_budget_realisasi")
-        .select("budget_line_id, bidang_id, tahun, kode_sub_kegiatan, nama_sub_kegiatan, kode_uraian, nama_uraian, pagu, realisasi, sisa")
+        .select("budget_line_id, bidang_id, tahun, kode_sub_kegiatan, nama_sub_kegiatan, kode_uraian, nama_uraian, pagu")
         .order("kode_sub_kegiatan")
         .order("kode_uraian")
         .limit(5000);
       if (realErr) throw realErr;
       setRows(realData || []);
+      const cmap = await fetchCutoffMap(supabase, todayISO());
+      setCutoffMap(cmap);
       if (prof?.role !== "admin" && prof?.bidang_id) setFilterBidang(prof.bidang_id);
     } catch (err) {
       setLoadError(err.message || "Gagal memuat data.");
@@ -73,18 +110,44 @@ export default function LaporanSpjPage() {
 
   useEffect(() => { loadAll(); }, []);
 
+  // Ganti tanggal cut-off: label bulan Excel ikut berubah, realisasi dihitung ulang.
+  async function handleCutoffChange(v) {
+    setCutoff(v);
+    const auto = bulanLabelFromISO(v);
+    if (auto) setBulanLabel(auto);
+    if (!v) return;
+    setCutoffLoading(true);
+    setMsg({ type: "", text: "" });
+    try {
+      const supabase = createBrowserClient();
+      const cmap = await fetchCutoffMap(supabase, v);
+      setCutoffMap(cmap);
+    } catch (err) {
+      setMsg({ type: "err", text: err.message || "Gagal menghitung realisasi cut-off." });
+    } finally {
+      setCutoffLoading(false);
+    }
+  }
+
   const tahunList = useMemo(() => {
     const s = new Set(rows.map((r) => String(r.tahun)).filter(Boolean));
     s.add(String(new Date().getFullYear()));
     return [...s].sort((a, b) => Number(b) - Number(a));
   }, [rows]);
 
+  // Baris efektif: realisasi = pencairan s.d. cut-off (inklusif).
+  // Sebelum peta cut-off termuat, fallback ke 0 agar tidak tercampur angka kumulatif view.
+  const effectiveRows = useMemo(() => {
+    if (!cutoffMap) return rows.map((r) => ({ ...r, realisasi: 0 }));
+    return rows.map((r) => ({ ...r, realisasi: cutoffMap[r.budget_line_id] ?? 0 }));
+  }, [rows, cutoffMap]);
+
   const filtered = useMemo(() => {
-    return rows
+    return effectiveRows
       .filter((r) => String(r.tahun) === String(filterTahun))
       .filter((r) => (activeBidang === "semua" ? true : r.bidang_id === activeBidang))
       .map((r) => ({ ...r, bidang_nama: bidangMap[r.bidang_id]?.nama || "—" }));
-  }, [rows, filterTahun, activeBidang, bidangMap]);
+  }, [effectiveRows, filterTahun, activeBidang, bidangMap]);
 
   const totals = useMemo(() => {
     const pagu = filtered.reduce((a, r) => a + Number(r.pagu || 0), 0);
@@ -112,13 +175,14 @@ export default function LaporanSpjPage() {
       const buf = await buildSpjBuffer(filtered, { bulanLabel: bulanLabel.trim() || defaultBulan(), tahun: filterTahun });
       const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
       const bidangNama = activeBidang === "semua" ? "Semua-Bidang" : (bidangMap[activeBidang]?.nama || "Bidang").replace(/\s+/g, "-");
-      const fname = `Laporan SPJ ${bidangNama} ${filterTahun}.xlsx`;
+      const cutoffPart = cutoff ? ` per ${cutoff.split("-").reverse().join("-")}` : "";
+      const fname = `Laporan SPJ ${bidangNama} ${filterTahun}${cutoffPart}.xlsx`;
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url; a.download = fname;
       document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 5000);
-      setMsg({ type: "ok", text: `${fname} terunduh (${filtered.length} uraian, ${previewSubs.length} sub kegiatan). SISA & % memakai rumus Excel.` });
+      setMsg({ type: "ok", text: `${fname} terunduh (${filtered.length} uraian, ${previewSubs.length} sub kegiatan). Realisasi per cut-off ${cutoff || "—"}. SISA & % memakai rumus Excel.` });
     } catch (err) {
       setMsg({ type: "err", text: err.message || "Gagal membuat laporan." });
     } finally {
@@ -170,11 +234,11 @@ export default function LaporanSpjPage() {
           </div>
           <div>
             <h2 className="font-bold text-[15px] text-slate-900 leading-tight">Filter laporan</h2>
-            <p className="text-xs text-slate-400 mt-0.5">Data realisasi diambil dari pencairan (CAIR/SELESAI).</p>
+            <p className="text-xs text-slate-400 mt-0.5">Realisasi = pencairan (CAIR/SELESAI) s.d. tanggal cut-off.</p>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mt-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
           <label className="block">
             <span className="block text-xs font-semibold text-slate-600 mb-1.5">Tahun anggaran</span>
             <span className="relative flex items-center">
@@ -201,7 +265,21 @@ export default function LaporanSpjPage() {
               <input value={bidangMap[profile?.bidang_id]?.nama || "—"} disabled className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-sm text-slate-600 cursor-not-allowed" />
             </label>
           )}
-          <label className="block md:col-span-2">
+          <label className="block">
+            <span className="block text-xs font-semibold text-slate-600 mb-1.5">Tanggal cut-off realisasi</span>
+            <span className="relative flex items-center">
+              <Calendar size={15} className="absolute left-3 text-slate-400 pointer-events-none" />
+              <input
+                type="date"
+                value={cutoff}
+                max={todayISO()}
+                onChange={(e) => handleCutoffChange(e.target.value)}
+                title="Hanya pencairan s.d. tanggal ini yang dihitung sebagai realisasi"
+                className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm outline-none focus:border-blue-500"
+              />
+            </span>
+          </label>
+          <label className="block">
             <span className="block text-xs font-semibold text-slate-600 mb-1.5">Label bulan (baris 3 Excel)</span>
             <span className="relative flex items-center">
               <FileText size={15} className="absolute left-3 text-slate-400 pointer-events-none" />
@@ -209,6 +287,11 @@ export default function LaporanSpjPage() {
             </span>
           </label>
         </div>
+        {cutoffLoading && (
+          <p className="mt-3 flex items-center gap-1.5 text-xs text-slate-500">
+            <Loader2 size={13} className="animate-spin" /> Menghitung ulang realisasi s.d. cut-off…
+          </p>
+        )}
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
           {[["Total pagu", totals.pagu], ["Realisasi", totals.realisasi], ["Sisa", totals.sisa]].map(([l, v]) => (
@@ -226,7 +309,7 @@ export default function LaporanSpjPage() {
         <button
           type="button"
           onClick={handleDownload}
-          disabled={busy || filtered.length === 0}
+          disabled={busy || cutoffLoading || filtered.length === 0}
           className="mt-4 inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-sm font-semibold shadow-md shadow-emerald-500/25 hover:shadow-lg disabled:opacity-50 transition-all"
         >
           {busy ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
@@ -238,7 +321,7 @@ export default function LaporanSpjPage() {
       <section className="bg-white rounded-2xl border border-slate-200/80 shadow-clean overflow-hidden" aria-label="Pratinjau">
         <div className="px-5 pt-5 pb-3">
           <h2 className="font-bold text-[15px] text-slate-900">Pratinjau isi ({previewSubs.length} sub kegiatan)</h2>
-          <p className="text-xs text-slate-400 mt-0.5">Sama urutannya dengan sheet Excel yang akan diunduh.</p>
+          <p className="text-xs text-slate-400 mt-0.5">Realisasi per cut-off {cutoff || "—"} · sama urutannya dengan sheet Excel yang akan diunduh.</p>
         </div>
         <div className="overflow-x-auto border-t border-slate-100">
           <table className="w-full text-xs min-w-[52rem]">
