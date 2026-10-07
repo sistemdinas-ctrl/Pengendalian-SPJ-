@@ -449,8 +449,12 @@ export default function HistoryPage() {
       if (remarkRes.error) throw remarkRes.error;
       if (disbRes.error && disbRes.error.code !== "42501") throw disbRes.error;
 
-      // Fetch budget realisasi untuk summary anggaran
-      const budgetLineIds = (itemsRes.data || []).map((it) => it.budget_lines?.bidang_id).filter(Boolean);
+      // Fetch budget realisasi untuk summary anggaran.
+      // Catatan (REVISI Okt 2026): sengaja diambil SE-SUB KEGIATAN agar
+      // Lembar Kendali (fallback tanpa snapshot) tetap menampilkan seluruh
+      // uraian se-sub. NpdPrint memfilter sendiri ke uraian NPD ini
+      // (lihat matchUraian di components/NpdPrint.jsx), sehingga a/b/c
+      // = jumlah uraian yang dipakai NPD (1 NPD 2 uraian -> dijumlahkan).
       const subKodeItems = (itemsRes.data || []).map((it) => it.budget_lines?.kode_sub_kegiatan).filter(Boolean);
       let bSum = [];
       if (subKodeItems.length > 0) {

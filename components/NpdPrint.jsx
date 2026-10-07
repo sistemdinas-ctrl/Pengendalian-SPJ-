@@ -163,12 +163,63 @@ export default function NpdPrint({
   // harus SAMA PERSIS seperti saat pertama diajukan — pencairan NPD ini
   // sendiri TIDAK boleh mengubah angka a/b/c di nota yang sama.
   // NPD nomor berikutnya otomatis ikut realisasi karena dibaca live di sana.
-  // Prioritas: snapshot_items se-sub kegiatan; fallback: nilai terkini
-  // MINUS pencairan milik NPD ini (untuk NPD lama sebelum ada snapshot).
+  // REVISI (Okt 2026): a/b/c = jumlah URAIAN yang dipakai NPD ini saja
+  // (bukan se-sub kegiatan). Bila 1 NPD berisi 2 uraian, nilainya dijumlahkan.
+  // Prioritas: snapshot_items yang difilter ke uraian NPD ini; fallback:
+  // budgetSummary live yang difilter ke uraian NPD ini MINUS pencairan milik
+  // NPD ini (untuk NPD lama sebelum ada snapshot).
   const snapshotRows = Array.isArray(pengajuan?.snapshot_items)
     ? pengajuan.snapshot_items
     : [];
   const useSnapshot = snapshotRows.length > 0 && pengajuan?.snapshot_at != null;
+
+  // Kunci uraian yang dipakai NPD ini (dari items).
+  const usedLineIds = new Set(
+    (items || []).map((it) => it.budget_line_id).filter(Boolean)
+  );
+  const usedKodeUraian = new Set(
+    (items || []).map((it) => it.budget_lines?.kode_uraian).filter(Boolean)
+  );
+  const matchUraian = (row) => {
+    if (!row) return false;
+    if (row.budget_line_id && usedLineIds.has(row.budget_line_id)) return true;
+    if (row.kode_uraian && usedKodeUraian.has(row.kode_uraian)) return true;
+    return false;
+  };
+
+  // Snapshot menyimpan seluruh uraian se-sub kegiatan (untuk lembar kendali),
+  // tapi a/b/c NPD hanya menjumlah uraian yang dipakai NPD ini.
+  const snapshotUraian =
+    useSnapshot && usedLineIds.size > 0
+      ? snapshotRows.filter(matchUraian)
+      : useSnapshot
+        ? snapshotRows
+        : [];
+  // Kalau filter menghasilkan kosong (mis. id berubah), pakai rencana>0,
+  // terakhir fallback ke seluruh snapshot agar tidak tampil nol.
+  const snapshotFiltered =
+    snapshotUraian.length > 0
+      ? snapshotUraian
+      : useSnapshot
+        ? (() => {
+            const byRencana = snapshotRows.filter(
+              (s) => Number(s.rencana || 0) > 0
+            );
+            return byRencana.length > 0 ? byRencana : snapshotRows;
+          })()
+        : [];
+
+  // Budget live (v_budget_realisasi) juga difilter ke uraian NPD ini saja.
+  // budgetSummary diambil se-sub kegiatan (untuk Kendali), sehingga filter
+  // selalu diperlukan di sini. Fallback ke summary apa adanya hanya
+  // untuk data lama agar dokumen tidak tampil nol.
+  const budgetFiltered =
+    usedLineIds.size > 0 || usedKodeUraian.size > 0
+      ? (budgetSummary || []).filter(matchUraian)
+      : budgetSummary || [];
+  const budgetUraian =
+    budgetFiltered.length > 0 ? budgetFiltered : budgetSummary || [];
+
   const ownCair = (disbursements || []).reduce(
     (a, d) => a + Number(d.nominal || 0),
     0
@@ -176,16 +227,16 @@ export default function NpdPrint({
   let totalPagu;
   let totalRealisasi;
   if (useSnapshot) {
-    totalPagu = snapshotRows.reduce((a, s) => a + Number(s.pagu || 0), 0);
-    totalRealisasi = snapshotRows.reduce(
+    totalPagu = snapshotFiltered.reduce((a, s) => a + Number(s.pagu || 0), 0);
+    totalRealisasi = snapshotFiltered.reduce(
       (a, s) => a + Number(s.realisasi || 0),
       0
     );
   } else {
-    totalPagu = budgetSummary.reduce((a, b) => a + Number(b.pagu || 0), 0);
+    totalPagu = budgetUraian.reduce((a, b) => a + Number(b.pagu || 0), 0);
     totalRealisasi = Math.max(
       0,
-      budgetSummary.reduce((a, b) => a + Number(b.realisasi || 0), 0) - ownCair
+      budgetUraian.reduce((a, b) => a + Number(b.realisasi || 0), 0) - ownCair
     );
   }
   const totalSisa = totalPagu - totalRealisasi;
