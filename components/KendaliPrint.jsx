@@ -4,7 +4,7 @@ import { useFitOnePage } from "./useFitOnePage";
 
 // ============================================================
 // Cetak Lembar Kendali Anggaran — Dinas Kepemudaan dan Olahraga
-//   Kertas : F4 (8,5 x 13 inci), margin atas-bawah 1,5 cm, kiri-kanan 1 cm
+//   Kertas : F4 (8,5 x 13 inci), margin semua sisi 1,5 cm
 //   (layout & margin sama seperti cetak NPD — class .npd-print-container
 //    dan .npd-sheet dipakai ulang agar aturan @media print berlaku)
 //   Isi    : Arial 11 pt (mengecil otomatis bila isi panjang agar tetap 1 halaman),
@@ -246,11 +246,11 @@ export default function KendaliPrint({
   return (
     <div className="npd-print-container">
       <style>{`
-        /* Kendali: kertas F4 8,5 x 13 inci, margin atas-bawah 1,5cm kiri-kanan 1cm */
+        /* Kendali: kertas F4 8,5 x 13 inci, margin semua sisi 1,5cm */
         .npd-sheet {
           width: 8.5in;
           min-height: 13in;
-          padding: 1.5cm 1cm;
+          padding: 1.5cm;
           box-sizing: border-box;
           background: #fff;
           color: #000;
@@ -285,7 +285,7 @@ export default function KendaliPrint({
             width: 8.5in !important;
             min-height: 0 !important;
             margin: 0 !important;
-            padding: 1.5cm 1cm !important;
+            padding: 1.5cm !important;
             box-shadow: none !important;
             border: 0 !important;
           }
