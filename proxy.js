@@ -3,7 +3,7 @@ import { createServerClient } from "@supabase/ssr";
 
 // Refresh session cookie agar RLS tahu siapa user di setiap request.
 // Tanpa ini, Server Component menganggap user logout walau baru login.
-export async function middleware(request) {
+export async function proxy(request) {
   // Env belum diisi -> jangan crash, biarkan halaman tampil
   // (dashboard akan menunjukkan panduan setup).
   if (
