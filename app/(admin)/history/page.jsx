@@ -30,6 +30,7 @@ import {
   Banknote,
   Printer,
   ClipboardList,
+  Trash2,
 } from "lucide-react";
 import { createBrowserClient } from "@/lib/supabase/client";
 import { formatRupiah } from "@/lib/domain";
@@ -212,6 +213,16 @@ export default function HistoryPage() {
   const [actionBusy, setActionBusy] = useState(false);
   const [actionError, setActionError] = useState("");
   const [actionMsg, setActionMsg] = useState({ type: "", text: "" });
+
+  // Aksi khusus admin: hapus permanen (pagu kembali) & koreksi nominal.
+  const [deleteModal, setDeleteModal] = useState(null); // {row}
+  const [deleteReason, setDeleteReason] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const [nominalModal, setNominalModal] = useState(null); // {row, items, loading}
+  const [nominalDraft, setNominalDraft] = useState({}); // itemId -> string
+  const [nominalReason, setNominalReason] = useState("");
+  const [nominalBusy, setNominalBusy] = useState(false);
+  const [nominalError, setNominalError] = useState("");
 
   const [budgetSummary, setBudgetSummary] = useState([]);
   const [showPrint, setShowPrint] = useState(false);
@@ -681,6 +692,111 @@ export default function HistoryPage() {
     }
   }
 
+  function openDeleteModal(row) {
+    setActionError("");
+    setDeleteReason("");
+    setDeleteModal({ row });
+  }
+
+  async function submitDeletePengajuan() {
+    if (!deleteModal) return;
+    const row = deleteModal.row;
+    setDeleting(true);
+    setActionError("");
+    try {
+      const supabase = getClient();
+      const { data, error } = await supabase.rpc("admin_hapus_pengajuan", {
+        p_pengajuan_id: row.id,
+        p_alasan: deleteReason.trim() ? deleteReason.trim() : null,
+      });
+      if (error) throw error;
+      setDeleteModal(null);
+      if (selectedId === row.id) closeDetail();
+      const dana = Number(data?.dana_dikembalikan || 0);
+      setActionMsg({
+        type: "ok",
+        text:
+          dana > 0
+            ? `${row.nomor_pengajuan} dihapus permanen. ${formatRupiah(dana)} dikeluarkan dari realisasi sehingga sisa pagu kembali.`
+            : `${row.nomor_pengajuan} dihapus permanen. Sisa pagu yang tertahan pengajuan ini kembali.`,
+      });
+      await loadAll();
+    } catch (err) {
+      setActionError(err.message || "Gagal menghapus pengajuan.");
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  async function openNominalModal(row) {
+    setActionError("");
+    setNominalError("");
+    setNominalReason("");
+    setNominalDraft({});
+    setNominalModal({ row, items: [], loading: true });
+    try {
+      const supabase = getClient();
+      const { data, error } = await supabase
+        .from("pengajuan_items")
+        .select(
+          "id, nominal, budget_line_id, budget_lines(kode_sub_kegiatan, kode_uraian, nama_uraian)"
+        )
+        .eq("pengajuan_id", row.id);
+      if (error) throw error;
+      const items = data || [];
+      setNominalModal({ row, items, loading: false });
+      setNominalDraft(
+        Object.fromEntries(items.map((it) => [it.id, String(Number(it.nominal || 0))]))
+      );
+    } catch (err) {
+      setNominalModal(null);
+      setActionMsg({ type: "err", text: err.message || "Gagal memuat uraian pengajuan." });
+    }
+  }
+
+  async function submitNominalEdit() {
+    if (!nominalModal) return;
+    const row = nominalModal.row;
+    const payload = nominalModal.items.map((it) => ({
+      id: it.id,
+      nominal: Number(
+        String(nominalDraft[it.id] ?? "").replace(/\./g, "").replace(/,/g, ".")
+      ),
+    }));
+    if (payload.length === 0) {
+      setNominalError("Pengajuan ini belum punya uraian.");
+      return;
+    }
+    if (payload.some((it) => !Number.isFinite(it.nominal) || it.nominal <= 0)) {
+      setNominalError("Semua nominal harus lebih dari Rp 0.");
+      return;
+    }
+    setNominalBusy(true);
+    setNominalError("");
+    try {
+      const supabase = getClient();
+      const { data, error } = await supabase.rpc("admin_ubah_nominal_pengajuan", {
+        p_pengajuan_id: row.id,
+        p_items: payload,
+        p_alasan: nominalReason.trim() ? nominalReason.trim() : null,
+      });
+      if (error) throw error;
+      setNominalModal(null);
+      setActionMsg({
+        type: "ok",
+        text: `${row.nomor_pengajuan}: nominal diperbarui menjadi ${formatRupiah(
+          data?.total ?? 0
+        )}. Realisasi & sisa pagu ikut disesuaikan.`,
+      });
+      await loadAll();
+      await openDetail(row.id);
+    } catch (err) {
+      setNominalError(err.message || "Gagal mengubah nominal.");
+    } finally {
+      setNominalBusy(false);
+    }
+  }
+
   if (!supabaseOk) {
     return (
       <div className="max-w-2xl">
@@ -942,6 +1058,30 @@ export default function HistoryPage() {
                               <Pencil size={15} />
                             </button>
                           )}
+                          {isAdmin && r.status !== "DRAFT" && r.status !== "REVISI" && (
+                            <button
+                              type="button"
+                              title="Koreksi nominal (admin)"
+                              aria-label={`Koreksi nominal ${r.nomor_pengajuan || ""}`}
+                              onClick={() => openNominalModal(r)}
+                              disabled={actionBusy}
+                              className="p-2 rounded-lg border border-sky-200 bg-sky-50/60 text-sky-600 hover:bg-sky-100 disabled:opacity-40 transition-all"
+                            >
+                              <Banknote size={15} />
+                            </button>
+                          )}
+                          {isAdmin && (
+                            <button
+                              type="button"
+                              title="Hapus permanen — pagu kembali (admin)"
+                              aria-label={`Hapus ${r.nomor_pengajuan || ""}`}
+                              onClick={() => openDeleteModal(r)}
+                              disabled={actionBusy}
+                              className="p-2 rounded-lg border border-rose-200 bg-rose-50/60 text-rose-600 hover:bg-rose-100 disabled:opacity-40 transition-all"
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          )}
                           {isAdmin && transitions.includes("DRAFT") && (
                             <button
                               type="button"
@@ -1057,7 +1197,7 @@ export default function HistoryPage() {
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center justify-end gap-2">
               {detailBase?.status !== "DRAFT" && (
                 <>
                   <button
@@ -1091,6 +1231,22 @@ export default function HistoryPage() {
                     className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-blue-300 bg-blue-50 text-xs md:text-[13px] font-semibold text-blue-700 hover:bg-blue-100 transition-all"
                   >
                     <FileEdit size={14} /> Revisi
+                  </button>
+                  {detailBase?.status !== "DRAFT" && detailBase?.status !== "REVISI" && (
+                    <button
+                      type="button"
+                      onClick={() => openNominalModal(detailBase)}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-sky-300 bg-sky-50 text-xs md:text-[13px] font-semibold text-sky-700 hover:bg-sky-100 transition-all"
+                    >
+                      <Banknote size={14} /> Koreksi nominal
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => openDeleteModal(detailBase)}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-rose-300 bg-rose-50 text-xs md:text-[13px] font-semibold text-rose-700 hover:bg-rose-100 transition-all"
+                  >
+                    <Trash2 size={14} /> Hapus
                   </button>
                 </>
               )}
@@ -1517,6 +1673,169 @@ export default function HistoryPage() {
                 Transisi yang tidak diizinkan skema (mis. CAIR → DRAFT) akan ditolak database.
               </p>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ---------- MODAL: KOREKSI NOMINAL (ADMIN) ---------- */}
+      {nominalModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="alertdialog" aria-modal="true" aria-label="Koreksi nominal">
+          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => !nominalBusy && setNominalModal(null)} />
+          <div className="relative w-full max-w-lg bg-white rounded-2xl shadow-2xl border border-slate-200 p-6 max-h-[90vh] overflow-auto">
+            <h2 className="font-bold text-slate-900">Koreksi nominal (admin)</h2>
+            <div className="mt-2.5 rounded-xl bg-slate-50 border border-slate-200 px-3.5 py-2.5">
+              <p className="font-mono text-xs font-semibold text-slate-700">{nominalModal.row.nomor_pengajuan}</p>
+              <p className="text-[13px] font-medium text-slate-800 mt-0.5 break-words" style={{ overflowWrap: "anywhere" }}>{nominalModal.row.nama_npd}</p>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Status: <span className="font-semibold">{nominalModal.row.status}</span>
+              </p>
+            </div>
+
+            {nominalModal.loading ? (
+              <div className="py-8 text-center text-slate-500">
+                <Loader2 size={18} className="animate-spin mx-auto" />
+              </div>
+            ) : nominalModal.items.length === 0 ? (
+              <p className="mt-4 text-[13px] text-slate-500">Pengajuan ini belum punya uraian.</p>
+            ) : (
+              <div className="mt-4 space-y-2.5">
+                {nominalModal.items.map((it) => (
+                  <div key={it.id} className="rounded-xl border border-slate-200 px-3.5 py-2.5">
+                    <p className="text-[13px] font-medium text-slate-800 break-words">
+                      {it.budget_lines?.nama_uraian || "—"}
+                    </p>
+                    <p className="font-mono text-xs text-slate-500 mt-0.5">
+                      {it.budget_lines?.kode_uraian} · {it.budget_lines?.kode_sub_kegiatan}
+                    </p>
+                    <label className="block text-[11px] font-semibold text-slate-500 mt-2">
+                      Nominal (Rp)
+                      <input
+                        type="number"
+                        min="1"
+                        step="1"
+                        value={nominalDraft[it.id] ?? ""}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setNominalDraft((d) => ({ ...d, [it.id]: v }));
+                          setNominalError("");
+                        }}
+                        className="mt-1 w-full px-3 py-2 rounded-lg border border-slate-200 text-sm font-normal tabular-nums outline-none focus:border-sky-500"
+                      />
+                    </label>
+                  </div>
+                ))}
+                <div className="flex items-center justify-between rounded-xl bg-sky-50 border border-sky-200 px-3.5 py-2.5">
+                  <p className="text-[13px] font-semibold text-sky-900">Total baru</p>
+                  <p className="text-[13px] font-bold text-sky-900 tabular-nums">
+                    {formatRupiah(
+                      nominalModal.items.reduce((a, it) => {
+                        const n = Number(
+                          String(nominalDraft[it.id] ?? "").replace(/\./g, "").replace(/,/g, ".")
+                        );
+                        return a + (Number.isFinite(n) ? n : 0);
+                      }, 0)
+                    )}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            <label className="block text-[13px] font-medium mt-3">
+              Alasan koreksi (opsional)
+              <textarea
+                value={nominalReason}
+                onChange={(e) => setNominalReason(e.target.value)}
+                rows={2}
+                placeholder="Tercatat di audit log…"
+                className="mt-1 w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm font-normal outline-none focus:border-sky-500"
+              />
+            </label>
+
+            {nominalError && (
+              <p role="alert" className="mt-3 text-[13px] text-rose-700 bg-rose-50 border border-rose-200 rounded-xl px-3 py-2">
+                {nominalError}
+              </p>
+            )}
+
+            <div className="flex justify-end gap-2 mt-5">
+              <button
+                type="button"
+                onClick={() => setNominalModal(null)}
+                disabled={nominalBusy}
+                className="px-4 py-2 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-50"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={submitNominalEdit}
+                disabled={nominalBusy || nominalModal.loading || nominalModal.items.length === 0}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-sm font-semibold disabled:opacity-60"
+              >
+                {nominalBusy && <Loader2 size={15} className="animate-spin" />}
+                {nominalBusy ? "Menyimpan…" : "Simpan nominal"}
+              </button>
+            </div>
+            <p className="text-xs text-slate-500 mt-3 flex items-start gap-1">
+              <CircleAlert size={13} className="mt-0.5 shrink-0" />
+              Nominal pencairan/realisasi ikut disinkronkan. Nilai dicek ulang terhadap sisa pagu & angkas semester tanpa menghitung NPD ini sendiri.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* ---------- MODAL: HAPUS PERMANEN (ADMIN) ---------- */}
+      {deleteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="alertdialog" aria-modal="true" aria-label="Hapus pengajuan">
+          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => !deleting && setDeleteModal(null)} />
+          <div className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl border border-slate-200 p-6 max-h-[90vh] overflow-auto">
+            <h2 className="font-bold text-slate-900">Hapus pengajuan permanen?</h2>
+            <div className="mt-2.5 rounded-xl bg-slate-50 border border-slate-200 px-3.5 py-2.5">
+              <p className="font-mono text-xs font-semibold text-slate-700">{deleteModal.row.nomor_pengajuan}</p>
+              <p className="text-[13px] font-medium text-slate-800 mt-0.5 break-words" style={{ overflowWrap: "anywhere" }}>{deleteModal.row.nama_npd}</p>
+              <p className="text-[13px] font-semibold text-slate-900 mt-1">
+                {formatRupiah(deleteModal.row.total_nominal)} · {deleteModal.row.status}
+              </p>
+            </div>
+            <ul className="mt-3 text-[13px] text-slate-600 space-y-1 list-disc pl-5">
+              <li>Pengajuan, uraian, riwayat status, dan remark revisi dihapus permanen.</li>
+              <li>Dana yang sudah cair dihapus dari realisasi sehingga sisa pagu kembali.</li>
+              <li>Tindakan ini tidak bisa dibatalkan. Jejak aksi tetap tercatat di audit log.</li>
+            </ul>
+            <label className="block text-[13px] font-medium mt-3">
+              Alasan penghapusan (opsional)
+              <textarea
+                value={deleteReason}
+                onChange={(e) => setDeleteReason(e.target.value)}
+                rows={2}
+                placeholder="Tercatat di audit log…"
+                className="mt-1 w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm font-normal outline-none focus:border-rose-500"
+              />
+            </label>
+            {actionError && (
+              <p role="alert" className="mt-3 text-[13px] text-rose-700 bg-rose-50 border border-rose-200 rounded-xl px-3 py-2">
+                {actionError}
+              </p>
+            )}
+            <div className="flex justify-end gap-2 mt-5">
+              <button
+                type="button"
+                onClick={() => setDeleteModal(null)}
+                disabled={deleting}
+                className="px-4 py-2 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-50"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={submitDeletePengajuan}
+                disabled={deleting}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-sm font-semibold disabled:opacity-60"
+              >
+                {deleting && <Loader2 size={15} className="animate-spin" />}
+                {deleting ? "Menghapus…" : "Ya, hapus permanen"}
+              </button>
+            </div>
           </div>
         </div>
       )}

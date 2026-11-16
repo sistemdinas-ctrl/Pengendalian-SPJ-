@@ -21,6 +21,8 @@ Jalankan migration berikut berurutan, masing-masing aman diulang:
 | `migration_009..011` | transisi status & kolom `profiles.nip` |
 | `migration_012_ptk.sql` | master **PTK** (tabel `public.ptk`) + kolom `pengajuan.ptk_id` untuk cetak NPD |
 | `migration_013_diajukan_cek_sisa.sql` | tolak ajuan ke DIAJUKAN bila nominal item melebihi sisa pagu uraian (cegah sisa minus) |
+| `migration_014..017` | snapshot dokumen NPD, angkas semester + carryover S1 ke S2 |
+| `migration_018_admin_force_delete_edit_nominal.sql` | RPC admin: hapus permanen pengajuan status apa pun (pagu kembali) + koreksi nominal meski sudah CAIR/SELESAI |
 
 Setelah `migration_012`, isi data PTK dari aplikasi: menu **Data PTK** (hanya admin) —
 pilih bidang, isi nama + NIP penanda tangan. Data ini otomatis dipakai pada
