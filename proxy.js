@@ -42,8 +42,8 @@ export async function proxy(request) {
 
   const path = request.nextUrl.pathname;
 
-  // Belum login -> lempar ke /login (kecuali memang ke /login)
-  if (!user && path !== "/login") {
+  // Belum login -> lempar ke /login (kecuali /login dan API route)
+  if (!user && path !== "/login" && !path.startsWith("/api/")) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
   // Sudah login tapi buka /login -> ke dashboard

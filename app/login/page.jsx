@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import {
   Mail,
@@ -241,6 +241,10 @@ function toFriendlyLoginError(err) {
   const raw = String(err?.message || err?.code || "");
   const msg = raw.toLowerCase();
 
+  if (msg.includes("percobaan gagal") || msg.includes("di-suspend"))
+    return String(err?.message || err);
+  if (msg.includes("verifikasi bot") || msg.includes("turnstile"))
+    return String(err?.message || err);
   if (msg.includes("invalid login credentials") || msg.includes("invalid_grant"))
     return "Email atau password salah. Periksa kembali lalu coba lagi.";
   if (msg.includes("email not confirmed") || msg.includes("email not verified"))
@@ -268,18 +272,69 @@ export default function LoginPage() {
   const [rememberMe, setRememberMe] = useState(true);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [countdown, setCountdown] = useState(0);
+  const [turnstileToken, setTurnstileToken] = useState("");
+  const turnstileRef = useRef(null);
+  const SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || "";
+
+  // Muat widget Cloudflare Turnstile (captcha tanpa klik)
+  useEffect(() => {
+    if (!SITE_KEY || !turnstileRef.current) return;
+    let id;
+    const render = () => {
+      if (!window.turnstile || !turnstileRef.current) return;
+      id = window.turnstile.render(turnstileRef.current, {
+        sitekey: SITE_KEY,
+        callback: (t) => setTurnstileToken(t),
+        "expired-callback": () => setTurnstileToken(""),
+        "error-callback": () => setTurnstileToken(""),
+      });
+    };
+    if (window.turnstile) render();
+    else {
+      const s = document.createElement("script");
+      s.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+      s.async = true;
+      s.onload = render;
+      document.body.appendChild(s);
+    }
+    return () => {
+      if (id !== undefined && window.turnstile) window.turnstile.remove(id);
+    };
+  }, [SITE_KEY]);
+
+  // Hitung mundur suspend
+  useEffect(() => {
+    if (countdown <= 0) return;
+    const t = setInterval(() => setCountdown((c) => (c <= 1 ? 0 : c - 1)), 1000);
+    return () => clearInterval(t);
+  }, [countdown > 0]);
 
   async function handleSubmit(e) {
     e.preventDefault();
     setError("");
+    if (countdown > 0) return;
+    if (SITE_KEY && !turnstileToken) {
+      setError("Verifikasi bot belum selesai. Tunggu sebentar lalu coba lagi.");
+      return;
+    }
     setLoading(true);
     try {
-      const supabase = createBrowserClient();
-      const { error: signErr } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
-        password,
+      const res = await fetch("/api/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: email.trim(),
+          password,
+          turnstileToken,
+        }),
       });
-      if (signErr) throw signErr;
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok) {
+        if (data.seconds) setCountdown(data.seconds);
+        throw new Error(data.error || "Login gagal. Coba lagi.");
+      }
+      // sukses: sesi sudah tersimpan di cookie oleh API route
       window.location.assign("/");
     } catch (err) {
       setError(toFriendlyLoginError(err));
@@ -484,12 +539,25 @@ export default function LoginPage() {
                 </motion.div>
               )}
 
+              {/* Countdown suspend */}
+              {countdown > 0 && (
+                <div className="flex items-center justify-center gap-2 text-[13px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-[10px] px-3.5 py-2.5">
+                  <Loader2 size={15} className="animate-spin" />
+                  Akun/IP Anda di-suspend. Coba lagi dalam <span className="tabular-nums">{countdown}</span> detik.
+                </div>
+              )}
+
+              {/* Cloudflare Turnstile */}
+              {SITE_KEY && (
+                <div className="flex justify-center pt-1" ref={turnstileRef} />
+              )}
+
               {/* Submit button */}
               <motion.button
                 whileHover={{ y: -1, boxShadow: "0 12px 32px rgba(99,102,241,0.35)" }}
                 whileTap={{ scale: 0.98 }}
                 type="submit"
-                disabled={loading}
+                disabled={loading || countdown > 0}
                 className="w-full h-[52px] rounded-[14px] text-white text-[16px] font-bold shadow-[0_10px_25px_rgba(99,102,241,0.25)] disabled:opacity-60 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center gap-2"
                 style={{
                   background: "linear-gradient(90deg, #5B5CF6, #7C2FF5)",
@@ -500,7 +568,7 @@ export default function LoginPage() {
                 ) : (
                   <LogIn size={18} />
                 )}
-                {loading ? "Memproses…" : "Masuk"}
+                {loading ? "Memproses…" : countdown > 0 ? `Tunggu ${countdown}s` : "Masuk"}
               </motion.button>
             </form>
 
