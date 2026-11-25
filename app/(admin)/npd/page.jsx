@@ -868,7 +868,14 @@ export default function NpdPage() {
       await loadAll();
     } catch (err) {
       if (err.code === "23505") {
-        setFormError("Satu uraian tidak boleh duplikat dalam satu pengajuan.");
+        const detail = String(err.details || err.message || "");
+        if (detail.includes("nomor_pengajuan") || detail.includes("pengajuan_nomor")) {
+          setFormError(
+            "Nomor NPD bentrok dengan data yang sudah ada. Silakan coba lagi."
+          );
+        } else {
+          setFormError("Satu uraian tidak boleh duplikat dalam satu pengajuan.");
+        }
       } else if (/melebihi sisa|angkas|diblokir/i.test(err.message || "")) {
         setFormError(err.message);
       } else {
