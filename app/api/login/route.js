@@ -84,7 +84,10 @@ export async function POST(req) {
     ip
   );
   if (!turn.ok) {
-    return NextResponse.json({ error: turn.error }, { status: 400 });
+    return NextResponse.json(
+      { error: turn.error, refreshTurnstile: true },
+      { status: 400 }
+    );
   }
 
   // --- Coba login lewat Supabase Auth (cookie SSR) ---
@@ -110,15 +113,23 @@ export async function POST(req) {
 
   if (signErr) {
     let seconds = 0;
+    let remaining = 0;
+    let count = 0;
     if (service) {
       const { data: fail } = await admin.rpc("login_lock_fail", { p_key: key });
       seconds = fail?.seconds || 0;
+      remaining = fail?.remaining || 0;
+      count = fail?.count || 0;
     }
     const pesan =
       "Email atau password salah. Periksa kembali lalu coba lagi." +
-      (seconds ? ` Percobaan berikutnya di-suspend ${seconds} detik.` : "");
+      (seconds
+        ? ` Akun/IP di-suspend ${seconds} detik setelah 5x salah.`
+        : count > 0
+          ? ` Percobaan ke-${count}/5 sebelum suspend.`
+          : "");
     return NextResponse.json(
-      { error: pesan, seconds },
+      { error: pesan, seconds, remaining, count },
       { status: 401 }
     );
   }

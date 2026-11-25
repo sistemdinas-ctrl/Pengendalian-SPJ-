@@ -275,7 +275,16 @@ export default function LoginPage() {
   const [countdown, setCountdown] = useState(0);
   const [turnstileToken, setTurnstileToken] = useState("");
   const turnstileRef = useRef(null);
+  const widgetIdRef = useRef(null);
   const SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || "";
+
+  // Token Turnstile hanya sekali pakai & kedaluwarsa -> musti di-reset.
+  function refreshTurnstile() {
+    setTurnstileToken("");
+    if (widgetIdRef.current !== null && window.turnstile) {
+      try { window.turnstile.reset(widgetIdRef.current); } catch { /* di-render ulang */ }
+    }
+  }
 
   // Muat widget Cloudflare Turnstile (captcha tanpa klik)
   useEffect(() => {
@@ -286,9 +295,10 @@ export default function LoginPage() {
       id = window.turnstile.render(turnstileRef.current, {
         sitekey: SITE_KEY,
         callback: (t) => setTurnstileToken(t),
-        "expired-callback": () => setTurnstileToken(""),
-        "error-callback": () => setTurnstileToken(""),
+        "expired-callback": () => refreshTurnstile(),
+        "error-callback": () => refreshTurnstile(),
       });
+      widgetIdRef.current = id;
     };
     if (window.turnstile) render();
     else {
@@ -303,12 +313,17 @@ export default function LoginPage() {
     };
   }, [SITE_KEY]);
 
-  // Hitung mundur suspend
+  // Hitung mundur suspend; saat habis, refresh token Turnstile otomatis.
   useEffect(() => {
     if (countdown <= 0) return;
     const t = setInterval(() => setCountdown((c) => (c <= 1 ? 0 : c - 1)), 1000);
     return () => clearInterval(t);
   }, [countdown > 0]);
+
+  useEffect(() => {
+    if (countdown === 0 && widgetIdRef.current !== null) refreshTurnstile();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [countdown]);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -332,6 +347,7 @@ export default function LoginPage() {
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.ok) {
         if (data.seconds) setCountdown(data.seconds);
+        if (data.refreshTurnstile) refreshTurnstile();
         throw new Error(data.error || "Login gagal. Coba lagi.");
       }
       // sukses: sesi sudah tersimpan di cookie oleh API route
